@@ -2,19 +2,19 @@ use std::collections::HashMap;
 use koopa::ir::{ Function, Value };
 use super::{ Error, Result };
 
-pub struct SymbolTable<'a> {
+pub struct SymbolTable {
     depth: i32,
-    funcs: HashMap<&'a str, Function>,
-    vals: Vec<HashMap<&'a str, Value>>,
+    funcs: HashMap<String, Function>,
+    vals: Vec<HashMap<String, Value>>,
     cur_func: Option<Function>,
 }
 
-impl<'a> SymbolTable<'a> {
+impl SymbolTable {
     pub fn new() -> Self {
         Self {
             depth: 0,
-            funcs: HashMap::<&str, Function>::new(),
-            vals: vec![HashMap::<&str, Value>::new()],
+            funcs: HashMap::<String, Function>::new(),
+            vals: vec![HashMap::<String, Value>::new()],
             cur_func: None,
         }
     }
@@ -37,10 +37,10 @@ impl<'a> SymbolTable<'a> {
         Ok(())
     } 
 
-    pub fn new_func(&mut self, id: &'a str, func: Function) -> Result<()> {
+    pub fn new_func(&mut self, id: String, func: Function) -> Result<()> {
         if !self.is_global() {
             Err(Error::WrongPosition)
-        } else if self.funcs.contains_key(id) || self.vals[0].contains_key(id) {
+        } else if self.funcs.contains_key(&id) || self.vals[0].contains_key(&id) {
             Err(Error::DuplicateDefinition)
         } else {
             self.funcs.insert(id, func);
@@ -48,10 +48,10 @@ impl<'a> SymbolTable<'a> {
         }
     }
 
-    pub fn new_val(&mut self, id: &'a str, val: Value) -> Result<()> {
+    pub fn new_val(&mut self, id: String, val: Value) -> Result<()> {
         let is_global = self.is_global();
         let curSymTab = self.vals.last_mut().unwrap();
-        if curSymTab.contains_key(id) || (is_global && self.funcs.contains_key(id)) {
+        if curSymTab.contains_key(&id) || (is_global && self.funcs.contains_key(&id)) {
             Err(Error::DuplicateDefinition)
         } else {
             curSymTab.insert(id, val);
@@ -61,7 +61,7 @@ impl<'a> SymbolTable<'a> {
 
     pub fn get_in(&mut self) -> () {
         self.depth = self.depth + 1;
-        self.vals.push(HashMap::<&str, Value>::new());
+        self.vals.push(HashMap::<String, Value>::new());
     }
 
     pub fn get_out(&mut self) -> () {

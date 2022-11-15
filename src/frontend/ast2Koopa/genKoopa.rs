@@ -5,18 +5,18 @@ use super::symTab::SymbolTable;
 use super::{ Error, Result };
 
 pub(super) trait GenerateKoopa<'a> {
-    fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable<'a>) -> Result<()>;
+    fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<()>;
 }
 
 impl<'a> GenerateKoopa<'a> for CompUnit {
-    fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable<'a>) -> Result<()> {
+    fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<()> {
         self.func_def.generate(program, symbol_table)?;
         Ok(())
     }
 }
 
 impl<'a> GenerateKoopa<'a> for FuncDef {
-    fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable<'a>) -> Result<()> {
+    fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<()> {
         let func = program.new_func(FunctionData::with_param_names(
             format!("@{}", self.ident).to_string(),
             vec![],
@@ -25,7 +25,7 @@ impl<'a> GenerateKoopa<'a> for FuncDef {
             },
         ));
 
-        symbol_table.new_func(&self.ident, func);
+        symbol_table.new_func(self.ident.clone(), func);
         symbol_table.set_cur_func(func);
         symbol_table.get_in();
         self.block.generate(program, symbol_table)?;
@@ -36,14 +36,14 @@ impl<'a> GenerateKoopa<'a> for FuncDef {
 }
 
 impl<'a> GenerateKoopa<'a> for Block {
-    fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable<'a>) -> Result<()> {
+    fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<()> {
         self.stmt.generate(program, symbol_table)?;
         Ok(())
     }
 }
 
 impl<'a> GenerateKoopa<'a> for Stmt {
-    fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable<'a>) -> Result<()> {
+    fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<()> {
         let func = symbol_table.cur_func().unwrap();
         let func_data = program.func_mut(func);
         match self {
