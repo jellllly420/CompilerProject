@@ -1,4 +1,5 @@
 mod frontend;
+mod backend;
 
 use lalrpop_util::lalrpop_mod;
 use koopa::back::KoopaGenerator;
@@ -29,13 +30,23 @@ fn main() -> Result<()> {
 
     let program = frontend::ast2Koopa::ast2Koopa(&ast).unwrap();
 
-    let mut generator = KoopaGenerator::new(Vec::new());
-    generator.generate_on(&program).unwrap();
-    let text_form_ir = from_utf8(&generator.writer()).unwrap().to_string();
+    
 
-    write(output, text_form_ir);
+    match mode.as_str() {
+        "-koopa" => {
+            let mut generator = KoopaGenerator::new(Vec::new());
+            generator.generate_on(&program).unwrap();
+            let text_form_ir = from_utf8(&generator.writer()).unwrap().to_string();
+            write(output, text_form_ir);
+        }
+        "-riscv" => {
+            let RISCV = backend::Koopa2RISCV::Koopa2RISCV(&program).unwrap();
+            write(output, RISCV);
+        }
+        _ => unreachable!(),
+    }
 
     // 输出解析得到的 AST
-    println!("{:#?}", ast);
+    //println!("{:#?}", ast);
     Ok(())
 }

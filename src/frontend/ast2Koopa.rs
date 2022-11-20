@@ -1,5 +1,4 @@
 use koopa::front::Driver;
-use std::fs::read_to_string;
 use super::ast::*;
 use koopa::ir::Program;
 
