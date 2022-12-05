@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use koopa::ir::{ Function, Value };
+use koopa::ir::{ Function, Value, BasicBlock };
 use super::{ Error, Result };
 
 pub struct SymbolTable {
@@ -7,6 +7,7 @@ pub struct SymbolTable {
     funcs: HashMap<String, Function>,
     vals: Vec<HashMap<String, Value>>,
     cur_func: Option<Function>,
+    cur_bb: Option<BasicBlock>
 }
 
 impl SymbolTable {
@@ -16,6 +17,7 @@ impl SymbolTable {
             funcs: HashMap::<String, Function>::new(),
             vals: vec![HashMap::<String, Value>::new()],
             cur_func: None,
+            cur_bb: None,
         }
     }
 
@@ -34,6 +36,15 @@ impl SymbolTable {
     
     pub fn reset_cur_func(&mut self) -> Result<()> {
         self.cur_func = None;
+        Ok(())
+    } 
+
+    pub fn cur_bb(&self) -> Option<BasicBlock> {
+        self.cur_bb
+    }
+
+    pub fn set_cur_bb(&mut self, bb: BasicBlock) -> Result<()> {
+        self.cur_bb = Some(bb);
         Ok(())
     } 
 

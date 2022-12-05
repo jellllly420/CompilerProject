@@ -22,7 +22,7 @@ FuncType: FuncType = "int" => FuncType::Int;
 
 Block: Block = "{" <stmt: Stmt> "}" => Block { <> };
 
-Stmt: Stmt = "return" <retval: Number> ";" => Stmt::ReturnStmt { <> };
+Stmt: Stmt = "return" <exp: Exp> ";" => Stmt::ReturnStmt ( <> );
 
 Number: i32 = <num: IntConst> => <>;
 
@@ -33,3 +33,77 @@ IntConst: i32 = {
     r"0[0-7]*" => i32::from_str_radix(<>, 8).unwrap(),
     r"0[xX][0-9a-fA-F]+" => i32::from_str_radix(&<>[2..], 16).unwrap(),
 }
+
+Exp: Exp = <lor_exp: LOrExp> => Exp::InnerLOrExp( <> );
+
+UnaryExp: UnaryExp = {
+    <primary_exp: PrimaryExp> => UnaryExp::InnerPrimaryExp(Box::new( <> )),
+    <unary_op: UnaryOp> <unary_exp: UnaryExp> => UnaryExp::InnerUnaryExp(unary_op, Box::new(unary_exp)),
+}
+
+PrimaryExp: PrimaryExp = {
+    "(" <exp: Exp> ")" => PrimaryExp::InnerExp(Box::new( <> )),
+    <num: Number> => PrimaryExp::Number( <> ),
+}
+
+UnaryOp: UnaryOp = {
+    "+" => UnaryOp::POSITIVE,
+    "-" => UnaryOp::NEGATIVE,
+    "!" => UnaryOp::NOT,
+}
+
+MulExp: MulExp =  {
+    <unary_exp: UnaryExp> => MulExp::InnerUnaryExp( <> ),
+    <mul_exp: MulExp> <mul_op: MulOp> <unary_exp: UnaryExp> => MulExp::InnerMulExp(Box::new(mul_exp), mul_op, unary_exp),
+}
+
+AddExp: AddExp = {
+    <mul_exp: MulExp> => AddExp::InnerMulExp( <> ),
+    <add_exp: AddExp> <add_op: AddOp> <mul_exp: MulExp> => AddExp::InnerAddExp(Box::new(add_exp), add_op, mul_exp),
+}
+
+AddOp: AddOp = {
+    "+" => AddOp::ADD,
+    "-" => AddOp::SUBTRACT,
+}
+
+MulOp: MulOp = {
+    "*" => MulOp::MULTIPLY,
+    "/" => MulOp::DIVIDE,
+    "%" => MulOp::MOD,
+}
+
+LOrExp: LOrExp = {
+    <land_exp: LAndExp> => LOrExp::InnerLAndExp( <> ),
+    <lor_exp: LOrExp> "||" <land_exp: LAndExp> => LOrExp::InnerLOrExp(Box::new(lor_exp), land_exp),
+}
+
+LAndExp: LAndExp = {
+    <eq_exp: EqExp> => LAndExp::InnerEqExp( <> ),
+    <land_exp: LAndExp> "&&" <eq_exp: EqExp> => LAndExp::InnerLAndExp(Box::new(land_exp), eq_exp),
+}
+
+EqExp: EqExp = {
+    <rel_exp: RelExp> => EqExp::InnerRelExp( <> ),
+    <eq_exp: EqExp> <eq_op: EqOp> <rel_exp: RelExp> => EqExp::InnerEqExp(Box::new(eq_exp), eq_op, rel_exp),
+}
+
+RelExp: RelExp = {
+    <add_exp: AddExp> => RelExp::InnerAddExp( <> ),
+    <rel_exp: RelExp> <rel_op: RelOp> <add_exp: AddExp> => RelExp::InnerRelExp(Box::new(rel_exp), rel_op, add_exp),
+}
+
+EqOp: EqOp = {
+    "==" => EqOp::EQUAL,
+    "!=" => EqOp::NOTEQUAL,
+}
+
+RelOp: RelOp = {
+    "<" => RelOp::LESSTHAN,
+    ">" => RelOp::GREATERTHAN,
+    "<=" => RelOp::LESSTHANOREQUAL,
+    ">=" => RelOp::GREATERTHANOREQUAL,
+}
+
+
+
