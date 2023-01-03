@@ -586,10 +586,10 @@ impl<'a> GenerateKoopa<'a> for ConstInitVal {
             }
         }
 
-        //let num = self.const_exp.generate(program, symbol_table)?;
+        let num = self.const_exp.generate(program, symbol_table)?;
         //let num = calculate(program, symbol_table, inst);
-        let inst = self.const_exp.generate(program, symbol_table)?;
-        let num = calculate(program, symbol_table, inst);
+        //let inst = self.const_exp.generate(program, symbol_table)?;
+        //let num = calculate(program, symbol_table, inst);
 
 
         Ok(num)
@@ -598,10 +598,10 @@ impl<'a> GenerateKoopa<'a> for ConstInitVal {
 }
 
 impl<'a> GenerateKoopa<'a> for ConstExp {
-    type Out = Value;
+    type Out = i32;
     
     fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<Self::Out> {
-        //Ok(self.exp.evaluate(program, symbol_table).unwrap())
-        self.exp.generate(program, symbol_table)
+        Ok(self.exp.evaluate(program, symbol_table).unwrap())
+        //self.exp.generate(program, symbol_table)
     }
 }
