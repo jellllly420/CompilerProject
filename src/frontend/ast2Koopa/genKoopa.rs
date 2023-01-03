@@ -550,7 +550,7 @@ impl<'a> GenerateKoopa<'a> for ConstInitVal {
     type Out = i32;
     
     fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<Self::Out> {
-        /*fn calculate(program: &mut Program, symbol_table: &SymbolTable, inst: Value) -> i32 {
+        fn calculate(program: &mut Program, symbol_table: &SymbolTable, inst: Value) -> i32 {
             /*
             Error when get varients
             */
@@ -561,7 +561,7 @@ impl<'a> GenerateKoopa<'a> for ConstInitVal {
                 Binary(bin) => {
                     let binary = bin.clone();
                     let num = match binary.op() {
-                        BinaryOp::Eq => (calculate(program, symbol_table, binary.lhs()).value() == calculate(program, symbol_table, binary.rhs())) as i32,
+                        BinaryOp::Eq => (calculate(program, symbol_table, binary.lhs()) == calculate(program, symbol_table, binary.rhs())) as i32,
                         BinaryOp::NotEq => (calculate(program, symbol_table, binary.lhs()) != calculate(program, symbol_table, binary.rhs())) as i32,
                         BinaryOp::Gt => (calculate(program, symbol_table, binary.lhs()) > calculate(program, symbol_table, binary.rhs())) as i32,
                         BinaryOp::Lt => (calculate(program, symbol_table, binary.lhs()) < calculate(program, symbol_table, binary.rhs())) as i32,
@@ -582,13 +582,15 @@ impl<'a> GenerateKoopa<'a> for ConstInitVal {
                     //dfg.remove_value(inst);
                     num
                 }
-                Load(load) => { 0 }
                 _ => unreachable!(),
             }
-        }*/
+        }
 
-        let num = self.const_exp.generate(program, symbol_table)?;
+        //let num = self.const_exp.generate(program, symbol_table)?;
         //let num = calculate(program, symbol_table, inst);
+        let inst = self.const_exp.generate(program, symbol_table)?;
+        let num = calculate(program, symbol_table, inst);
+
 
         Ok(num)
 
@@ -596,9 +598,10 @@ impl<'a> GenerateKoopa<'a> for ConstInitVal {
 }
 
 impl<'a> GenerateKoopa<'a> for ConstExp {
-    type Out = i32;
+    type Out = Value;
     
     fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<Self::Out> {
-        Ok(self.exp.evaluate(program, symbol_table).unwrap())
+        //Ok(self.exp.evaluate(program, symbol_table).unwrap())
+        self.exp.generate(program, symbol_table)
     }
 }
