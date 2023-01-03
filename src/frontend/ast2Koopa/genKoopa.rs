@@ -1,8 +1,10 @@
 use koopa::ir::{ Program, Function, FunctionData, Value, Type };
 use koopa::ir::values::BinaryOp;
+use koopa::ir::entities::ValueKind::*;
+use koopa::ir::dfg::DataFlowGraph;
 use koopa::ir::builder::{ BasicBlockBuilder, LocalInstBuilder, ValueBuilder };
 use crate::frontend::ast::*;
-use super::symTab::SymbolTable;
+use super::symTab::{ SymbolTable, CustomValue };
 use super::{ Error, Result };
 
 pub(super) trait GenerateKoopa<'a> {
@@ -33,6 +35,11 @@ impl<'a> GenerateKoopa<'a> for FuncDef {
             },
         ));
 
+        let mut func_data = program.func_mut(func);
+        let mut entry = func_data.dfg_mut().new_bb().basic_block(Some("%entry".into()));
+        func_data.layout_mut().bbs_mut().extend([entry]);
+        symbol_table.set_cur_bb(entry);
+
         symbol_table.new_func(self.ident.clone(), func);
         symbol_table.set_cur_func(func);
         symbol_table.get_in();
@@ -47,7 +54,27 @@ impl<'a> GenerateKoopa<'a> for Block {
     type Out = ();
     
     fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<Self::Out> {
-        self.stmt.generate(program, symbol_table)?;
+        /*let mut func = symbol_table.cur_func().unwrap();
+        let mut func_data = program.func_mut(func);
+        let mut entry = func_data.dfg_mut().new_bb().basic_block(Some("%entry".into()));
+        func_data.layout_mut().bbs_mut().extend([entry]);
+        symbol_table.set_cur_bb(entry);*/
+
+        for block_item in &self.block_items {
+            block_item.generate(program, symbol_table)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'a> GenerateKoopa<'a> for BlockItem {
+    type Out = ();
+    
+    fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<Self::Out> {
+        match self {
+            Self::InnerDecl(decl) => decl.generate(program, symbol_table)?,
+            Self::InnerStmt(stmt) => stmt.generate(program, symbol_table)?,
+        };
         Ok(())
     }
 }
@@ -58,19 +85,37 @@ impl<'a> GenerateKoopa<'a> for Stmt {
     fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<Self::Out> {
         match self {
             Self::ReturnStmt(exp) => {
-                let mut func = symbol_table.cur_func().unwrap();
-                let mut func_data = program.func_mut(func);
-                let mut entry = func_data.dfg_mut().new_bb().basic_block(Some("%entry".into()));
-                func_data.layout_mut().bbs_mut().extend([entry]);
-                symbol_table.set_cur_bb(entry);
-
                 let ret_val = exp.generate(program, symbol_table)?;
-
-                func = symbol_table.cur_func().unwrap();
-                func_data = program.func_mut(func);
-                entry = *func_data.layout_mut().bbs().back_key().unwrap();
+                let func = symbol_table.cur_func().unwrap();
+                let func_data = program.func_mut(func);
                 let ret = func_data.dfg_mut().new_value().ret(Some(ret_val));
-                func_data.layout_mut().bb_mut(entry).insts_mut().extend([ret]);
+                func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([ret]);
+                Ok(())
+            }
+            Self::AssignStmt(ident, exp) => {
+                match symbol_table.get_val(&ident)? {
+                    CustomValue::Value(val) => {
+                        let src = exp.generate(program, symbol_table)?;
+                        let func = symbol_table.cur_func().unwrap();
+                        let func_data = program.func_mut(func);
+                        let store = func_data.dfg_mut().new_value().store(src, val);
+                        func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([store]);
+                        Ok(())
+                    }
+                    CustomValue::ConstValue(val) => Err(Error::AssignToConst)
+                }
+            }
+            Self::ExpStmt(exp) => {
+                match exp {
+                    Some(e) => { e.generate(program, symbol_table)?; }
+                    None => {}
+                };
+                Ok(())
+            }
+            Self::Block(block) => {
+                symbol_table.get_in();
+                block.generate(program, symbol_table)?;
+                symbol_table.get_out();
                 Ok(())
             }
             _ => Err(Error::UnknownStatementType)
@@ -117,6 +162,18 @@ impl<'a> GenerateKoopa<'a> for PrimaryExp {
     fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<Self::Out> {
         match self {
             Self::InnerExp(exp) => exp.generate(program, symbol_table),
+            Self::InnerLVal(lval) => {
+                match symbol_table.get_val(&lval)? {
+                    CustomValue::Value(val) => {
+                        let func = symbol_table.cur_func().unwrap();
+                        let func_data = program.func_mut(func);
+                        let load = func_data.dfg_mut().new_value().load(val);
+                        func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([load]);
+                        Ok(load)
+                    }
+                    CustomValue::ConstValue(val) => Ok(val)
+                }
+            }
             Self::Number(num) => {
                 let func = symbol_table.cur_func().unwrap();
                 let func_data = program.func_mut(func);
@@ -259,5 +316,148 @@ impl<'a> GenerateKoopa<'a> for RelExp {
                 Ok(inst)
             }
         }
+    }
+}
+
+impl<'a> GenerateKoopa<'a> for Decl {
+    type Out = ();
+    
+    fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<Self::Out> {
+        match self {
+            Self::InnerConstDecl(const_decl) => const_decl.generate(program, symbol_table),
+            Self::InnerVarDecl(var_decl) => var_decl.generate(program, symbol_table),
+        }
+    }
+}
+
+impl<'a> GenerateKoopa<'a> for ConstDecl {
+    type Out = ();
+    
+    fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<Self::Out> {
+        for const_def in &self.const_defs {
+            const_def.generate(program, symbol_table)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'a> GenerateKoopa<'a> for VarDecl {
+    type Out = ();
+    
+    fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<Self::Out> {
+        for var_def in &self.var_defs {
+            var_def.generate(program, symbol_table)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'a> GenerateKoopa<'a> for VarDef {
+    type Out = ();
+    
+    fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<Self::Out> {
+        let mut func_data = program.func_mut(symbol_table.cur_func().unwrap());
+        match self {
+            Self::InnerNoInit(ident) => {
+                if symbol_table.check(&ident) {
+                    return Err(Error::DuplicateDefinition);
+                }
+                let alloc = func_data.dfg_mut().new_value().alloc(Type::get_i32());
+                symbol_table.new_val(ident.clone(), alloc);
+                func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([alloc]);
+            }
+            Self::InnerInit(ident, initval) => {          
+                if symbol_table.check(&ident) {
+                    return Err(Error::DuplicateDefinition);
+                }
+                let alloc = func_data.dfg_mut().new_value().alloc(Type::get_i32());
+                symbol_table.new_val(ident.clone(), alloc);
+                func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([alloc]);
+                let init = initval.generate(program, symbol_table)?;
+                func_data = program.func_mut(symbol_table.cur_func().unwrap());
+                let store = func_data.dfg_mut().new_value().store(init, alloc);
+                func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([store]);
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<'a> GenerateKoopa<'a> for ConstDef {
+    type Out = ();
+    
+    fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<Self::Out> {
+        if symbol_table.check(&self.ident) {
+            return Err(Error::DuplicateDefinition);
+        }
+        let num = self.const_initval.generate(program, symbol_table)?;
+        let func_data = program.func_mut(symbol_table.cur_func().unwrap());
+        let val = func_data.dfg_mut().new_value().integer(num);
+        symbol_table.new_const_val(self.ident.clone(), val);
+        Ok(())
+    }
+}
+
+impl<'a> GenerateKoopa<'a> for InitVal {
+    type Out = Value;
+    
+    fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<Self::Out> {
+        self.exp.generate(program, symbol_table)
+    }
+}
+
+impl<'a> GenerateKoopa<'a> for ConstInitVal {
+    type Out = i32;
+    
+    fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<Self::Out> {
+        fn calculate(program: &mut Program, symbol_table: &SymbolTable, inst: Value) -> i32 {
+            /*
+            Error when get varients
+            */
+            let mut func_data = program.func_mut(symbol_table.cur_func().unwrap());
+            let mut dfg = func_data.dfg_mut();
+            match dfg.value(inst).kind() {
+                Integer(num) => num.value(),
+                Binary(bin) => {
+                    let binary = bin.clone();
+                    let num = match binary.op() {
+                        BinaryOp::Eq => (calculate(program, symbol_table, binary.lhs()) == calculate(program, symbol_table, binary.rhs())) as i32,
+                        BinaryOp::NotEq => (calculate(program, symbol_table, binary.lhs()) != calculate(program, symbol_table, binary.rhs())) as i32,
+                        BinaryOp::Gt => (calculate(program, symbol_table, binary.lhs()) > calculate(program, symbol_table, binary.rhs())) as i32,
+                        BinaryOp::Lt => (calculate(program, symbol_table, binary.lhs()) < calculate(program, symbol_table, binary.rhs())) as i32,
+                        BinaryOp::Ge => (calculate(program, symbol_table, binary.lhs()) >= calculate(program, symbol_table, binary.rhs())) as i32,
+                        BinaryOp::Le => (calculate(program, symbol_table, binary.lhs()) <= calculate(program, symbol_table, binary.rhs())) as i32,
+                        BinaryOp::Add => calculate(program, symbol_table, binary.lhs()) + calculate(program, symbol_table, binary.rhs()),
+                        BinaryOp::Sub => calculate(program, symbol_table, binary.lhs()) - calculate(program, symbol_table, binary.rhs()),
+                        BinaryOp::Mul => calculate(program, symbol_table, binary.lhs()) * calculate(program, symbol_table, binary.rhs()),
+                        BinaryOp::Div => calculate(program, symbol_table, binary.lhs()) / calculate(program, symbol_table, binary.rhs()),
+                        BinaryOp::Mod => calculate(program, symbol_table, binary.lhs()) % calculate(program, symbol_table, binary.rhs()),
+                        BinaryOp::And => calculate(program, symbol_table, binary.lhs()) & calculate(program, symbol_table, binary.rhs()),
+                        BinaryOp::Or => calculate(program, symbol_table, binary.lhs()) | calculate(program, symbol_table, binary.rhs()),
+                        _ => unreachable!(),
+                    };
+                    func_data = program.func_mut(symbol_table.cur_func().unwrap());
+                    func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().remove(&inst);
+                    //dfg = func_data.dfg_mut();
+                    //dfg.remove_value(inst);
+                    num
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        let inst = self.const_exp.generate(program, symbol_table)?;
+        let num = calculate(program, symbol_table, inst);
+
+        Ok(num)
+
+    }
+}
+
+impl<'a> GenerateKoopa<'a> for ConstExp {
+    type Out = Value;
+    
+    fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<Self::Out> {
+        self.exp.generate(program, symbol_table)
     }
 }

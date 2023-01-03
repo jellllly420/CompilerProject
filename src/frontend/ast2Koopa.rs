@@ -12,6 +12,10 @@ pub enum Error {
     WrongPosition,
     DuplicateDefinition,
     UnknownStatementType,
+    UndefinedLVal,
+    WrongTypeValue,
+    NeedAssignment,
+    AssignToConst
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

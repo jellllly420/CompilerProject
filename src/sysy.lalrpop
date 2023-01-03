@@ -20,9 +20,19 @@ FuncDef: FuncDef = {
 
 FuncType: FuncType = "int" => FuncType::Int;
 
-Block: Block = "{" <stmt: Stmt> "}" => Block { <> };
+BlockItem: BlockItem = {
+    <decl: Decl> => BlockItem::InnerDecl( <> ),
+    <stmt: Stmt> => BlockItem::InnerStmt( <> ),
+}
 
-Stmt: Stmt = "return" <exp: Exp> ";" => Stmt::ReturnStmt ( <> );
+Block: Block = "{" <block_items: (BlockItem)*> "}" => Block { <> };
+
+Stmt: Stmt = {
+    "return" <exp: Exp> ";" => Stmt::ReturnStmt ( <> ),
+    <lval: Ident> "=" <exp: Exp> ";" => Stmt::AssignStmt ( <> ),
+    <exp: (Exp)?> ";" => Stmt::ExpStmt ( <> ),
+    <block: Block> => Stmt::Block( <> ),
+}
 
 Number: i32 = <num: IntConst> => <>;
 
@@ -43,6 +53,7 @@ UnaryExp: UnaryExp = {
 
 PrimaryExp: PrimaryExp = {
     "(" <exp: Exp> ")" => PrimaryExp::InnerExp(Box::new( <> )),
+    <lval: Ident> => PrimaryExp::InnerLVal( <> ),
     <num: Number> => PrimaryExp::Number( <> ),
 }
 
@@ -105,5 +116,30 @@ RelOp: RelOp = {
     ">=" => RelOp::GREATERTHANOREQUAL,
 }
 
+ConstInitVal: ConstInitVal = <const_exp: ConstExp> => ConstInitVal { <> };
 
+InitVal: InitVal = <exp: Exp> => InitVal { <> };
 
+ConstDef: ConstDef = <ident: Ident> "=" <const_initval: ConstInitVal> => ConstDef { <> };
+
+VarDef: VarDef = {
+    <ident: Ident> "=" <initval: InitVal> => VarDef::InnerInit ( <> ),
+    <ident: Ident> => VarDef::InnerNoInit ( <> ),
+}
+
+Decl: Decl = {
+    <const_decl: ConstDecl> => Decl::InnerConstDecl( <> ),
+    <var_decl: VarDecl> => Decl::InnerVarDecl( <> ),
+}
+
+ConstDecl: ConstDecl = "const" "int" <const_def: ConstDef> <mut const_defs: ("," <ConstDef>)*> ";" => {
+    const_defs.insert(0, const_def);
+    ConstDecl { const_defs }
+};
+
+VarDecl: VarDecl = "int" <var_def: VarDef> <mut var_defs: ("," <VarDef>)*> ";" => {
+    var_defs.insert(0, var_def);
+    VarDecl { var_defs }
+};
+
+ConstExp: ConstExp = <exp: Exp> => ConstExp { <> };
