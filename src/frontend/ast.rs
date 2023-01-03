@@ -21,11 +21,19 @@ pub struct Block {
 }
 
 #[derive(Debug)]
+pub struct If {
+    pub exp: Exp,
+    pub then: Stmt,
+    pub else_then: Option<Stmt>,
+}
+
+#[derive(Debug)]
 pub enum Stmt {
     ReturnStmt(Exp), 
     AssignStmt(String, Exp),
     ExpStmt(Option<Exp>),
     Block(Block),
+    IfStmt(Box<If>)
 }
 
 #[derive(Debug)]

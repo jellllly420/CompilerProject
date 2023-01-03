@@ -4,6 +4,7 @@ use koopa::ir::Program;
 
 mod symTab;
 mod genKoopa;
+mod constEval;
 
 use genKoopa::GenerateKoopa;
 
