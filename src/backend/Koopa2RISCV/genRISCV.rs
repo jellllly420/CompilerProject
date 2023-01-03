@@ -43,7 +43,7 @@ impl GenerateRISCV for FunctionData {
                 byte = byte + 4;
             }
         }
-        byte = byte + 4;
+        //byte = byte + 4;
         if byte % 16 != 0 {
             byte /= 16;
             byte *= 16;
