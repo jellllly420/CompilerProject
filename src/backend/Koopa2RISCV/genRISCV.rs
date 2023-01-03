@@ -264,9 +264,9 @@ impl GenerateRISCV for Branch {
         self.cond().generate(RISCV, info, program)?;
         let dfg = program.func(info.cur_func().unwrap()).dfg();
         let mem = info.get_memory(self.cond());
-        //if mem.is_ok() {
+        if mem.is_ok() {
             RISCV.push_str(format!("  lw t0, {}(sp)\n", mem.unwrap().to_string()).as_str());
-        //}
+        }
         RISCV.push_str(format!("  bnez t0, .{}\n", dfg.bb(self.true_bb()).name().as_ref().unwrap()[1..].to_string()).as_str());
         RISCV.push_str(format!("  j .{}\n", dfg.bb(self.false_bb()).name().as_ref().unwrap()[1..].to_string()).as_str());
         Ok(())
