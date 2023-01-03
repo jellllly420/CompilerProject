@@ -307,7 +307,7 @@ impl<'a> GenerateKoopa<'a> for LOrExp {
     fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<Self::Out> {
         match self {
             Self::InnerLAndExp(land_exp) => land_exp.generate(program, symbol_table),
-            /*Self::InnerLOrExp(lor_exp, land_exp) => {
+            Self::InnerLOrExp(lor_exp, land_exp) => {
                 let mut val = lor_exp.generate(program, symbol_table)?;
 
                 let func = symbol_table.cur_func().unwrap();
@@ -327,7 +327,7 @@ impl<'a> GenerateKoopa<'a> for LOrExp {
 
                 func_data.layout_mut().bbs_mut().extend([false_bb]);
                 symbol_table.set_cur_bb(false_bb);
-                val = lor_exp.generate(program, symbol_table)?;
+                val = land_exp.generate(program, symbol_table)?;
                 func_data = program.func_mut(func);
                 ne = func_data.dfg_mut().new_value().binary(BinaryOp::NotEq, zero, val);
                 store = func_data.dfg_mut().new_value().store(ne, alloc);
@@ -340,8 +340,8 @@ impl<'a> GenerateKoopa<'a> for LOrExp {
                 func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([load]);
 
                 Ok(load)
-            }*/
-            Self::InnerLOrExp(lor_exp, land_exp) => {
+            }
+            /*Self::InnerLOrExp(lor_exp, land_exp) => {
                 let val1 = lor_exp.generate(program, symbol_table)?;
                 let val2 = land_exp.generate(program, symbol_table)?;
                 let func = symbol_table.cur_func().unwrap();
@@ -352,7 +352,7 @@ impl<'a> GenerateKoopa<'a> for LOrExp {
                 let inst = func_data.dfg_mut().new_value().binary(BinaryOp::Or, inst1, inst2);
                 func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([inst1, inst2, inst]);
                 Ok(inst)
-            }
+            }*/
         }
     }
 }
@@ -363,7 +363,7 @@ impl<'a> GenerateKoopa<'a> for LAndExp {
     fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<Self::Out> {
         match self {
             Self::InnerEqExp(eq_exp) => eq_exp.generate(program, symbol_table),
-            /*Self::InnerLAndExp(land_exp, eq_exp) => {
+            Self::InnerLAndExp(land_exp, eq_exp) => {
                 let mut val = land_exp.generate(program, symbol_table)?;
 
                 let func = symbol_table.cur_func().unwrap();
@@ -396,8 +396,8 @@ impl<'a> GenerateKoopa<'a> for LAndExp {
                 func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([load]);
 
                 Ok(load)
-            }*/
-            Self::InnerLAndExp(land_exp, eq_exp) => {
+            }
+            /*Self::InnerLAndExp(land_exp, eq_exp) => {
                 let val1 = land_exp.generate(program, symbol_table)?;
                 let val2 = eq_exp.generate(program, symbol_table)?;
                 let func = symbol_table.cur_func().unwrap();
@@ -408,7 +408,7 @@ impl<'a> GenerateKoopa<'a> for LAndExp {
                 let inst = func_data.dfg_mut().new_value().binary(BinaryOp::And, inst1, inst2);
                 func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([inst1, inst2, inst]);
                 Ok(inst)
-            }
+            }*/
         }
     }
 }
