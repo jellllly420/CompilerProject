@@ -14,6 +14,9 @@ pub struct SymbolTable {
     vals: Vec<HashMap<String, CustomValue>>,
     cur_func: Option<Function>,
     cur_bb: Option<BasicBlock>,
+    block_cnt: i32,
+    ret_val: Option<Value>,
+    end: Option<BasicBlock>,
 }
 
 impl SymbolTable {
@@ -24,7 +27,28 @@ impl SymbolTable {
             vals: vec![HashMap::<String, CustomValue>::new()],
             cur_func: None,
             cur_bb: None,
+            block_cnt: 0,
+            ret_val: None,
+            end: None,
         }
+    }
+
+    pub fn set_ret_val(&mut self, ret_val: Value) -> Result<()> {
+        self.ret_val = Some(ret_val);
+        Ok(())
+    }
+
+    pub fn get_ret_val(&self) -> Result<Option<Value>> {
+        Ok(self.ret_val)
+    }
+
+    pub fn set_end(&mut self, end: BasicBlock) -> Result<()> {
+        self.end = Some(end);
+        Ok(())
+    }
+
+    pub fn get_end(&self) -> Result<Option<BasicBlock>> {
+        Ok(self.end)
     }
 
     pub fn is_global(&self) -> bool {
@@ -53,6 +77,15 @@ impl SymbolTable {
         self.cur_bb = Some(bb);
         Ok(())
     } 
+
+    pub fn add_bb_cnt(&mut self) -> Result<()> {
+        self.block_cnt = self.block_cnt + 1;
+        Ok(())
+    }
+
+    pub fn get_bb_cnt(&self) -> Result<i32> {
+        Ok(self.block_cnt)
+    }
 
     pub fn new_func(&mut self, id: String, func: Function) -> Result<()> {
         if !self.is_global() {

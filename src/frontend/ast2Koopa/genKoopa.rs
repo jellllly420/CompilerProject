@@ -35,15 +35,45 @@ impl<'a> GenerateKoopa<'a> for FuncDef {
             },
         ));
 
-        let mut func_data = program.func_mut(func);
-        let mut entry = func_data.dfg_mut().new_bb().basic_block(Some("%entry".into()));
-        func_data.layout_mut().bbs_mut().extend([entry]);
-        symbol_table.set_cur_bb(entry);
-
         symbol_table.new_func(self.ident.clone(), func);
         symbol_table.set_cur_func(func);
         symbol_table.get_in();
+
+        let mut func_data = program.func_mut(func);
+        let mut entry = func_data.dfg_mut().new_bb().basic_block(Some("%entry".into()));
+        func_data.layout_mut().bbs_mut().extend([entry]);
+        symbol_table.add_bb_cnt();
+        let mut end = func_data.dfg_mut().new_bb().basic_block(Some("%end".into()));
+        symbol_table.set_end(end);
+        symbol_table.set_cur_bb(entry);
+
+        match self.func_type {
+            FuncType::Int => {
+                let alloc = func_data.dfg_mut().new_value().alloc(Type::get_i32());
+                symbol_table.new_val("ret".to_string(), alloc);
+                func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([alloc]);
+                symbol_table.set_ret_val(alloc);
+            }
+        };
+
         self.block.generate(program, symbol_table)?;
+
+        
+        let mut func_data = program.func_mut(func);
+        let jump = func_data.dfg_mut().new_value().jump(symbol_table.get_end()?.unwrap());
+        func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([jump]);
+        func_data.layout_mut().bbs_mut().extend([end]);
+        symbol_table.add_bb_cnt();
+        symbol_table.set_cur_bb(end);
+
+        match self.func_type {
+            FuncType::Int => {
+                let load = func_data.dfg_mut().new_value().load(symbol_table.get_ret_val()?.unwrap());
+                let ret = func_data.dfg_mut().new_value().ret(Some(load));
+                func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([load, ret]);
+            }
+        };
+
         symbol_table.get_out();
         symbol_table.reset_cur_func();
         Ok(())
@@ -88,8 +118,13 @@ impl<'a> GenerateKoopa<'a> for Stmt {
                 let ret_val = exp.generate(program, symbol_table)?;
                 let func = symbol_table.cur_func().unwrap();
                 let func_data = program.func_mut(func);
-                let ret = func_data.dfg_mut().new_value().ret(Some(ret_val));
-                func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([ret]);
+                let store = func_data.dfg_mut().new_value().store(ret_val, symbol_table.get_ret_val()?.unwrap());
+                let jump = func_data.dfg_mut().new_value().jump(symbol_table.get_end()?.unwrap());
+                func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([store, jump]);
+                let mut bb = func_data.dfg_mut().new_bb().basic_block(Some(format!("%bb_{}", symbol_table.get_bb_cnt()?.to_string()).as_str().into()));
+                func_data.layout_mut().bbs_mut().extend([bb]);
+                symbol_table.add_bb_cnt();
+                symbol_table.set_cur_bb(bb);
                 Ok(())
             }
             Self::AssignStmt(ident, exp) => {
