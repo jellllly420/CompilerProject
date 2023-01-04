@@ -190,6 +190,70 @@ impl<'a> GenerateKoopa<'a> for Stmt {
 
                 Ok(())
             }
+            Self::WhileStmt(while_stmt) => {
+                let func = symbol_table.cur_func().unwrap();
+                let mut func_data = program.func_mut(func);
+                let mut entry = func_data.dfg_mut().new_bb().basic_block(Some(format!("%bb_{}", symbol_table.get_bb_cnt()?.to_string()).as_str().into()));
+                symbol_table.add_bb_cnt();
+                let mut body = func_data.dfg_mut().new_bb().basic_block(Some(format!("%bb_{}", symbol_table.get_bb_cnt()?.to_string()).as_str().into()));
+                symbol_table.add_bb_cnt();
+                let mut next = func_data.dfg_mut().new_bb().basic_block(Some(format!("%bb_{}", symbol_table.get_bb_cnt()?.to_string()).as_str().into()));
+                symbol_table.add_bb_cnt();
+
+                let mut jump = func_data.dfg_mut().new_value().jump(entry);
+                func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([jump]);
+                func_data.layout_mut().bbs_mut().extend([entry]);
+                symbol_table.set_cur_bb(entry);
+
+                let cond = while_stmt.exp.generate(program, symbol_table)?;
+                func_data = program.func_mut(func);
+                let branch = func_data.dfg_mut().new_value().branch(cond, body, next);
+                func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([branch]);
+                func_data.layout_mut().bbs_mut().extend([body]);
+                symbol_table.set_cur_bb(body);
+
+                symbol_table.push_loop_entry(entry);
+                symbol_table.push_loop_next(next);
+
+                while_stmt.stmt.generate(program, symbol_table)?;
+
+                symbol_table.pop_loop_entry();
+                symbol_table.pop_loop_next();
+
+                func_data = program.func_mut(func);
+                jump = func_data.dfg_mut().new_value().jump(entry);
+                func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([jump]);
+                func_data.layout_mut().bbs_mut().extend([next]);
+                symbol_table.set_cur_bb(next);
+
+                Ok(())
+            }
+            Self::BREAK => {
+                let next = symbol_table.get_loop_next()?;
+                let func = symbol_table.cur_func().unwrap();
+                let func_data = program.func_mut(func);
+                let jump = func_data.dfg_mut().new_value().jump(next);
+                func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([jump]);
+                let body2 = func_data.dfg_mut().new_bb().basic_block(Some(format!("%bb_{}", symbol_table.get_bb_cnt()?.to_string()).as_str().into()));
+                symbol_table.add_bb_cnt();
+                func_data.layout_mut().bbs_mut().extend([body2]);
+                symbol_table.set_cur_bb(body2);
+
+                Ok(())
+            }
+            Self::CONTINUE => {
+                let entry = symbol_table.get_loop_entry()?;
+                let func = symbol_table.cur_func().unwrap();
+                let func_data = program.func_mut(func);
+                let jump = func_data.dfg_mut().new_value().jump(entry);
+                func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([jump]);
+                let body2 = func_data.dfg_mut().new_bb().basic_block(Some(format!("%bb_{}", symbol_table.get_bb_cnt()?.to_string()).as_str().into()));
+                symbol_table.add_bb_cnt();
+                func_data.layout_mut().bbs_mut().extend([body2]);
+                symbol_table.set_cur_bb(body2);
+
+                Ok(())
+            }
             _ => Err(Error::UnknownStatementType)
         }
     }

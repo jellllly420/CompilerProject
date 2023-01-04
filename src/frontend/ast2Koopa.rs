@@ -16,7 +16,8 @@ pub enum Error {
     UndefinedLVal,
     WrongTypeValue,
     NeedAssignment,
-    AssignToConst
+    AssignToConst,
+    NoLoopWrapped,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

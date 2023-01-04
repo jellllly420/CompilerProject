@@ -28,12 +28,21 @@ pub struct If {
 }
 
 #[derive(Debug)]
+pub struct While {
+    pub exp: Exp,
+    pub stmt: Stmt,
+}
+
+#[derive(Debug)]
 pub enum Stmt {
     ReturnStmt(Exp), 
     AssignStmt(String, Exp),
     ExpStmt(Option<Exp>),
     Block(Block),
-    IfStmt(Box<If>)
+    IfStmt(Box<If>),
+    WhileStmt(Box<While>),
+    BREAK,
+    CONTINUE,
 }
 
 #[derive(Debug)]

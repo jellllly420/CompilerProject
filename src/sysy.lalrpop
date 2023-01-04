@@ -38,11 +38,15 @@ MatchedStmt: Stmt = {
     <exp: (Exp)?> ";" => Stmt::ExpStmt ( <> ),
     <block: Block> => Stmt::Block( <> ),
     "if" "(" <exp: Exp> ")" <then: MatchedStmt> "else" <else_then: MatchedStmt> => Stmt::IfStmt(Box::new(If{exp, then, else_then: Some(else_then)})),
+    "while" "(" <exp: Exp> ")" <stmt: MatchedStmt> => Stmt::WhileStmt(Box::new(While{ <> })),
+    "break" ";" => Stmt::BREAK,
+    "continue" ";" => Stmt::CONTINUE,
 }
 
 OpenStmt: Stmt = {
     "if" "(" <exp: Exp> ")" <then: Stmt> => Stmt::IfStmt(Box::new(If{exp, then, else_then: None})),
-    "if" "(" <exp: Exp> ")" <then: MatchedStmt> "else" <else_then: OpenStmt> => Stmt::IfStmt(Box::new(If{exp, then, else_then: Some(else_then)}))
+    "if" "(" <exp: Exp> ")" <then: MatchedStmt> "else" <else_then: OpenStmt> => Stmt::IfStmt(Box::new(If{exp, then, else_then: Some(else_then)})),
+    "while" "(" <exp: Exp> ")" <stmt: OpenStmt> => Stmt::WhileStmt(Box::new(While{ <> })),
 }
 
 Number: i32 = <num: IntConst> => <>;

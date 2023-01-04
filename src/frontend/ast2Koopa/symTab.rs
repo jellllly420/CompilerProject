@@ -17,6 +17,8 @@ pub struct SymbolTable {
     block_cnt: i32,
     ret_val: Option<Value>,
     end: Option<BasicBlock>,
+    loop_entry: Vec<BasicBlock>,
+    loop_next: Vec<BasicBlock>,
 }
 
 impl SymbolTable {
@@ -30,7 +32,43 @@ impl SymbolTable {
             block_cnt: 0,
             ret_val: None,
             end: None,
+            loop_entry: vec![],
+            loop_next: vec![],
         }
+    }
+
+    pub fn push_loop_entry(&mut self, entry: BasicBlock) -> Result<()> {
+        self.loop_entry.push(entry);
+        Ok(())
+    }
+
+    pub fn push_loop_next(&mut self, next: BasicBlock) -> Result<()> {
+        self.loop_next.push(next);
+        Ok(())
+    }
+
+    pub fn pop_loop_entry(&mut self) -> Result<()> {
+        self.loop_entry.pop();
+        Ok(())
+    }
+
+    pub fn pop_loop_next(&mut self) -> Result<()> {
+        self.loop_next.pop();
+        Ok(())
+    }
+
+    pub fn get_loop_entry(&self) -> Result<BasicBlock> {
+        if self.loop_entry.len() == 0 {
+            return Err(Error::NoLoopWrapped);
+        }
+        Ok(*self.loop_entry.last().unwrap())
+    }
+
+    pub fn get_loop_next(&self) -> Result<BasicBlock> {
+        if self.loop_next.len() == 0 {
+            return Err(Error::NoLoopWrapped);
+        }
+        Ok(*self.loop_next.last().unwrap())
     }
 
     pub fn set_ret_val(&mut self, ret_val: Value) -> Result<()> {
