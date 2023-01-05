@@ -18,12 +18,13 @@ pub enum Error {
     NeedAssignment,
     AssignToConst,
     NoLoopWrapped,
+    UndefinedFunction,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
 
 pub fn ast2Koopa(ast: &CompUnit) -> Result<Program> {
-    let lib = r"decl @getint(): i32
+    /*let lib = r"decl @getint(): i32
 decl @getch(): i32
 decl @getarray(*i32): i32
 decl @putint(i32): i32
@@ -32,7 +33,8 @@ decl @putarray(i32, *i32): i32
 decl @starttime(): i32
 decl @stoptime(): i32";
     let driver: Driver<_> = lib.into();
-    let mut program = driver.generate_program().unwrap();
+    let mut program = driver.generate_program().unwrap();*/
+    let mut program = Program::new();
     let mut symbol_table = symTab::SymbolTable::new();
     for (func, func_data) in program.funcs() {
         symbol_table.new_func(func_data.name().to_string(), func.clone());

@@ -2,7 +2,7 @@ use koopa::ir::{ Program, Function, FunctionData, Value, Type };
 use koopa::ir::values::BinaryOp;
 use koopa::ir::entities::ValueKind::*;
 use koopa::ir::dfg::DataFlowGraph;
-use koopa::ir::builder::{ BasicBlockBuilder, LocalInstBuilder, ValueBuilder };
+use koopa::ir::builder::{ BasicBlockBuilder, LocalInstBuilder, ValueBuilder, GlobalInstBuilder };
 use crate::frontend::ast::*;
 use super::symTab::{ SymbolTable, CustomValue };
 use super::constEval::EvaluateConstant;
@@ -19,7 +19,72 @@ impl<'a> GenerateKoopa<'a> for CompUnit {
     type Out = ();
 
     fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<Self::Out> {
-        self.func_def.generate(program, symbol_table)?;
+        {
+            let mut func = program.new_func(FunctionData::with_param_names(
+                "@getint".into(),
+                vec![],
+                Type::get_i32(),
+            ));
+            symbol_table.new_func("getint".to_string(), func);
+            func = program.new_func(FunctionData::with_param_names(
+                "@getch".into(),
+                vec![],
+                Type::get_i32(),
+            ));
+            symbol_table.new_func("getch".to_string(), func);
+            func = program.new_func(FunctionData::with_param_names(
+                "@getarray".into(),
+                vec![(None, Type::get_pointer(Type::get_i32()))],
+                Type::get_i32(),
+            ));
+            symbol_table.new_func("getarray".to_string(), func);
+            func = program.new_func(FunctionData::with_param_names(
+                "@putint".into(),
+                vec![(None, Type::get_i32())],
+                Type::get_unit(),
+            ));
+            symbol_table.new_func("putint".to_string(), func);
+            func = program.new_func(FunctionData::with_param_names(
+                "@putch".into(),
+                vec![(None, Type::get_i32())],
+                Type::get_unit(),
+            ));
+            symbol_table.new_func("putch".to_string(), func);
+            func = program.new_func(FunctionData::with_param_names(
+                "@putarray".into(),
+                vec![(None, Type::get_i32()), (None, Type::get_pointer(Type::get_i32()))],
+                Type::get_unit(),
+            ));
+            symbol_table.new_func("putarray".to_string(), func);
+            func = program.new_func(FunctionData::with_param_names(
+                "@starttime".into(),
+                vec![],
+                Type::get_unit(),
+            ));
+            symbol_table.new_func("starttime".to_string(), func);
+            func = program.new_func(FunctionData::with_param_names(
+                "@stoptime".into(),
+                vec![],
+                Type::get_unit(),
+            ));
+            symbol_table.new_func("stoptime".to_string(), func);
+        }
+
+        for global_item in &self.global_items {
+            global_item.generate(program, symbol_table)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'a> GenerateKoopa<'a> for GlobalItem {
+    type Out = ();
+    
+    fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<Self::Out> {
+        match self {
+            Self::Decl(decl) => decl.generate(program, symbol_table)?,
+            Self::FuncDef(func_def) => func_def.generate(program, symbol_table)?,
+        };
         Ok(())
     }
 }
@@ -28,11 +93,23 @@ impl<'a> GenerateKoopa<'a> for FuncDef {
     type Out = ();
 
     fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<Self::Out> {
+        if symbol_table.check(&self.ident) {
+            return Err(Error::DuplicateDefinition);
+        }
+
         let func = program.new_func(FunctionData::with_param_names(
             format!("@{}", self.ident).to_string(),
-            vec![],
+            {
+                let mut params = vec![];
+                for param in &self.func_fparams {
+                    //println!("{}", (*param).clone());
+                    params.push((Some(format!("%{}", param).to_string()), Type::get_i32()));
+                }
+                params
+            },
             match self.func_type {
-                FuncType::Int => Type::get_i32()
+                FuncType::INT => Type::get_i32(),
+                FuncType::VOID => Type::get_unit(),
             },
         ));
 
@@ -41,20 +118,32 @@ impl<'a> GenerateKoopa<'a> for FuncDef {
         symbol_table.get_in();
 
         let mut func_data = program.func_mut(func);
-        let mut entry = func_data.dfg_mut().new_bb().basic_block(Some("%entry".into()));
+        let mut entry = func_data.dfg_mut().new_bb().basic_block(Some(format!("%bb_{}", symbol_table.get_bb_cnt()?.to_string()).as_str().into()));
+        symbol_table.add_bb_cnt();
         func_data.layout_mut().bbs_mut().extend([entry]);
         symbol_table.set_cur_bb(entry);
-        let mut end = func_data.dfg_mut().new_bb().basic_block(Some("%end".into()));
+        let mut end = func_data.dfg_mut().new_bb().basic_block(Some(format!("%bb_{}", symbol_table.get_bb_cnt()?.to_string()).as_str().into()));
+        symbol_table.add_bb_cnt();
         symbol_table.set_end(end);
 
         match self.func_type {
-            FuncType::Int => {
+            FuncType::INT => {
                 let alloc = func_data.dfg_mut().new_value().alloc(Type::get_i32());
                 symbol_table.new_val("ret".to_string(), alloc);
                 func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([alloc]);
                 symbol_table.set_ret_val(alloc);
             }
+            FuncType::VOID => {}
         };
+
+        for index in 0..self.func_fparams.len() {
+            let src = func_data.params()[index];
+            func_data = program.func_mut(func);
+            let alloc = func_data.dfg_mut().new_value().alloc(Type::get_i32());
+            let store = func_data.dfg_mut().new_value().store(src, alloc);
+            func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([alloc, store]);
+            symbol_table.new_val(self.func_fparams[index].clone(), alloc);
+        }
 
         self.block.generate(program, symbol_table)?;
 
@@ -66,10 +155,14 @@ impl<'a> GenerateKoopa<'a> for FuncDef {
         symbol_table.set_cur_bb(end);
 
         match self.func_type {
-            FuncType::Int => {
+            FuncType::INT => {
                 let load = func_data.dfg_mut().new_value().load(symbol_table.get_ret_val()?.unwrap());
                 let ret = func_data.dfg_mut().new_value().ret(Some(load));
                 func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([load, ret]);
+            }
+            FuncType::VOID => {
+                let ret = func_data.dfg_mut().new_value().ret(None);
+                func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([ret]);
             }
         };
 
@@ -113,18 +206,33 @@ impl<'a> GenerateKoopa<'a> for Stmt {
     
     fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<Self::Out> {
         match self {
-            Self::ReturnStmt(exp) => {
-                let ret_val = exp.generate(program, symbol_table)?;
-                let func = symbol_table.cur_func().unwrap();
-                let func_data = program.func_mut(func);
-                let store = func_data.dfg_mut().new_value().store(ret_val, symbol_table.get_ret_val()?.unwrap());
-                let jump = func_data.dfg_mut().new_value().jump(symbol_table.get_end()?.unwrap());
-                func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([store, jump]);
-                let mut bb = func_data.dfg_mut().new_bb().basic_block(Some(format!("%bb_{}", symbol_table.get_bb_cnt()?.to_string()).as_str().into()));
-                func_data.layout_mut().bbs_mut().extend([bb]);
-                symbol_table.add_bb_cnt();
-                symbol_table.set_cur_bb(bb);
-                Ok(())
+            Self::ReturnStmt(ret) => {
+                match ret {
+                    ReturnStmt::Int(exp) => {
+                        let ret_val = exp.generate(program, symbol_table)?;
+                        let func = symbol_table.cur_func().unwrap();
+                        let func_data = program.func_mut(func);
+                        let store = func_data.dfg_mut().new_value().store(ret_val, symbol_table.get_ret_val()?.unwrap());
+                        let jump = func_data.dfg_mut().new_value().jump(symbol_table.get_end()?.unwrap());
+                        func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([store, jump]);
+                        let mut bb = func_data.dfg_mut().new_bb().basic_block(Some(format!("%bb_{}", symbol_table.get_bb_cnt()?.to_string()).as_str().into()));
+                        func_data.layout_mut().bbs_mut().extend([bb]);
+                        symbol_table.add_bb_cnt();
+                        symbol_table.set_cur_bb(bb);
+                        Ok(())
+                    }
+                    ReturnStmt::VOID => {
+                        let func = symbol_table.cur_func().unwrap();
+                        let func_data = program.func_mut(func);
+                        let jump = func_data.dfg_mut().new_value().jump(symbol_table.get_end()?.unwrap());
+                        func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([jump]);
+                        let mut bb = func_data.dfg_mut().new_bb().basic_block(Some(format!("%bb_{}", symbol_table.get_bb_cnt()?.to_string()).as_str().into()));
+                        func_data.layout_mut().bbs_mut().extend([bb]);
+                        symbol_table.add_bb_cnt();
+                        symbol_table.set_cur_bb(bb);
+                        Ok(())
+                    }
+                }
             }
             Self::AssignStmt(ident, exp) => {
                 match symbol_table.get_val(&ident)? {
@@ -288,6 +396,18 @@ impl<'a> GenerateKoopa<'a> for UnaryExp {
                 func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([inst]);
                 Ok(inst)
             }
+            Self::InnerCall(ident, func_rparams) => {
+                let mut params = vec![];
+                for func_rparam in func_rparams {
+                    let param = func_rparam.generate(program, symbol_table)?;
+                    params.push(param);
+                }
+                let func = symbol_table.cur_func().unwrap();
+                let func_data = program.func_mut(func);
+                let call = func_data.dfg_mut().new_value().call(symbol_table.get_func(ident)?, params);
+                func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([call]);
+                Ok(call)
+            }
         }
     }
 }
@@ -299,22 +419,30 @@ impl<'a> GenerateKoopa<'a> for PrimaryExp {
         match self {
             Self::InnerExp(exp) => exp.generate(program, symbol_table),
             Self::InnerLVal(lval) => {
+                let func = symbol_table.cur_func().unwrap();
+                let func_data = program.func_mut(func);
                 match symbol_table.get_val(&lval)? {
                     CustomValue::Value(val) => {
-                        let func = symbol_table.cur_func().unwrap();
-                        let func_data = program.func_mut(func);
                         let load = func_data.dfg_mut().new_value().load(val);
                         func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([load]);
                         Ok(load)
                     }
-                    CustomValue::ConstValue(val) => Ok(val)
+                    CustomValue::ConstValue(val) => {
+                        let num = func_data.dfg_mut().new_value().integer(val);
+                        Ok(num)
+                    }
                 }
             }
             Self::Number(num) => {
-                let func = symbol_table.cur_func().unwrap();
-                let func_data = program.func_mut(func);
-                let val = func_data.dfg_mut().new_value().integer(*num);
-                Ok(val)
+                if symbol_table.is_global() {
+                    let val = program.new_value().integer(*num);
+                    Ok(val)
+                } else {
+                    let func = symbol_table.cur_func().unwrap();
+                    let func_data = program.func_mut(func);
+                    let val = func_data.dfg_mut().new_value().integer(*num);
+                    Ok(val)
+                }
             }
         }
     }
@@ -560,27 +688,43 @@ impl<'a> GenerateKoopa<'a> for VarDef {
     type Out = ();
     
     fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<Self::Out> {
-        let mut func_data = program.func_mut(symbol_table.cur_func().unwrap());
         match self {
             Self::InnerNoInit(ident) => {
                 if symbol_table.check(&ident) {
                     return Err(Error::DuplicateDefinition);
                 }
-                let alloc = func_data.dfg_mut().new_value().alloc(Type::get_i32());
-                symbol_table.new_val(ident.clone(), alloc);
-                func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([alloc]);
+                if symbol_table.is_global() {
+                    let init = program.new_value().zero_init(Type::get_i32());
+                    let global_alloc = program.new_value().global_alloc(init);
+                    program.set_value_name(global_alloc, Some(format!("@{}", ident).to_string()));
+                    symbol_table.new_val(ident.clone(), global_alloc);
+                } else {
+                    let func_data = program.func_mut(symbol_table.cur_func().unwrap());
+                    let alloc = func_data.dfg_mut().new_value().alloc(Type::get_i32());
+                    symbol_table.new_val(ident.clone(), alloc);
+                    func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([alloc]);
+                }
             }
             Self::InnerInit(ident, initval) => {          
                 if symbol_table.check(&ident) {
                     return Err(Error::DuplicateDefinition);
                 }
-                let alloc = func_data.dfg_mut().new_value().alloc(Type::get_i32());
-                symbol_table.new_val(ident.clone(), alloc);
-                func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([alloc]);
-                let init = initval.generate(program, symbol_table)?;
-                func_data = program.func_mut(symbol_table.cur_func().unwrap());
-                let store = func_data.dfg_mut().new_value().store(init, alloc);
-                func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([store]);
+                if symbol_table.is_global() {
+                    let num = initval.exp.evaluate(program, symbol_table).unwrap();
+                    let init = program.new_value().integer(num);
+                    let global_alloc = program.new_value().global_alloc(init);
+                    program.set_value_name(global_alloc, Some(format!("@{}", ident).to_string()));
+                    symbol_table.new_val(ident.clone(), global_alloc);
+                } else {
+                    let mut func_data = program.func_mut(symbol_table.cur_func().unwrap());
+                    let alloc = func_data.dfg_mut().new_value().alloc(Type::get_i32());
+                    symbol_table.new_val(ident.clone(), alloc);
+                    func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([alloc]);
+                    let init = initval.generate(program, symbol_table)?;
+                    func_data = program.func_mut(symbol_table.cur_func().unwrap());
+                    let store = func_data.dfg_mut().new_value().store(init, alloc);
+                    func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([store]);
+                }
             }
         }
         Ok(())
@@ -595,9 +739,17 @@ impl<'a> GenerateKoopa<'a> for ConstDef {
             return Err(Error::DuplicateDefinition);
         }
         let num = self.const_initval.generate(program, symbol_table)?;
-        let func_data = program.func_mut(symbol_table.cur_func().unwrap());
-        let val = func_data.dfg_mut().new_value().integer(num);
-        symbol_table.new_const_val(self.ident.clone(), val);
+        symbol_table.new_const_val(self.ident.clone(), num);
+        //println!("{}", num);
+
+        /*if symbol_table.is_global() {
+            let val = program.new_value().integer(num);
+            symbol_table.new_const_val(self.ident.clone(), val);
+        } else {
+            let func_data = program.func_mut(symbol_table.cur_func().unwrap());
+            let val = func_data.dfg_mut().new_value().integer(num);
+            symbol_table.new_const_val(self.ident.clone(), val);
+        }*/
         Ok(())
     }
 }
@@ -614,7 +766,7 @@ impl<'a> GenerateKoopa<'a> for ConstInitVal {
     type Out = i32;
     
     fn generate(&'a self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<Self::Out> {
-        fn calculate(program: &mut Program, symbol_table: &SymbolTable, inst: Value) -> i32 {
+        /*fn calculate(program: &mut Program, symbol_table: &SymbolTable, inst: Value) -> i32 {
             /*
             Error when get varients
             */
@@ -648,7 +800,7 @@ impl<'a> GenerateKoopa<'a> for ConstInitVal {
                 }
                 _ => unreachable!(),
             }
-        }
+        }*/
 
         let num = self.const_exp.generate(program, symbol_table)?;
         //let num = calculate(program, symbol_table, inst);

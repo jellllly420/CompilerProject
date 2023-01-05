@@ -1,19 +1,28 @@
 #[derive(Debug)]
 pub struct CompUnit {
-    pub func_def: FuncDef,
+    pub global_items: Vec<GlobalItem>,
+}
+
+#[derive(Debug)]
+pub enum GlobalItem {
+    Decl(Decl),
+    FuncDef(FuncDef),
 }
 
 #[derive(Debug)]
 pub struct FuncDef {
     pub func_type: FuncType,
     pub ident: String,
+    pub func_fparams: Vec<String>,
     pub block: Block,
 }
 
 #[derive(Debug)]
 pub enum FuncType {
-    Int,
+    INT,
+    VOID,
 }
+
 
 #[derive(Debug)]
 pub struct Block {
@@ -34,8 +43,14 @@ pub struct While {
 }
 
 #[derive(Debug)]
+pub enum ReturnStmt {
+    Int(Exp),
+    VOID,
+}
+
+#[derive(Debug)]
 pub enum Stmt {
-    ReturnStmt(Exp), 
+    ReturnStmt(ReturnStmt), 
     AssignStmt(String, Exp),
     ExpStmt(Option<Exp>),
     Block(Block),
@@ -54,6 +69,7 @@ pub enum Exp {
 pub enum UnaryExp {
     InnerPrimaryExp(Box<PrimaryExp>),
     InnerUnaryExp(UnaryOp, Box<UnaryExp>),
+    InnerCall(String, Vec<Exp>),
 }
 
 #[derive(Debug)]

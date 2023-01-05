@@ -1,7 +1,9 @@
 use super::{ Error, Result };
 use super::info::Information;
 use koopa::ir::entities::{ Program, FunctionData, ValueData, ValueKind, Value };
+use koopa::ir::types::TypeKind;
 use koopa::ir::values::*;
+use std::cmp::max;
 
 pub(super) trait GenerateRISCV {
     fn generate(&self, RISCV: &mut String, info: &mut Information, program: &Program) -> Result<()>;
@@ -9,12 +11,18 @@ pub(super) trait GenerateRISCV {
 
 impl GenerateRISCV for Program {
     fn generate(&self, RISCV: &mut String, info: &mut Information, program: &Program) -> Result<()> {   
-        RISCV.push_str("  .data\n");
         for &val in self.inst_layout() {
             let val_data = self.borrow_value(val);
             // generate for global value
-        }
-        RISCV.push_str("  .text\n");
+            match val_data.kind() {
+                ValueKind::GlobalAlloc(global_alloc) => {
+                    info.add_cur_inst(val);
+                    global_alloc.generate(RISCV, info, program);
+                    info.remove_cur_inst();
+                }
+                _ => {}
+            }
+        };
         for &func in self.func_layout() {
             let func_data = self.func(func);
             info.set_cur_func(func);
@@ -30,27 +38,51 @@ impl GenerateRISCV for FunctionData {
         if self.layout().entry_bb().is_none() {
             return Ok(());
         }
+        RISCV.push_str("  .text\n");
         let name = &self.name().to_string()[1..];
         RISCV.push_str(format!("  .global {}\n", name).as_str());
         RISCV.push_str(format!("{}:\n", name).as_str());
         let mut byte = 0;
         let dfg = self.dfg();
+        let mut flag = false;
+        let mut arg_cnt = 0;
         for (&bb, node) in self.layout().bbs() {
             for &inst in node.insts().keys() {
+                match dfg.value(inst).kind() {
+                    ValueKind::Call(call) => {
+                        flag = true;
+                        if call.args().len() > 8 {
+                            arg_cnt = max(call.args().len() - 8, arg_cnt);
+                        }
+                    }
+                    _ => {}
+                }
                 if dfg.value(inst).ty().is_unit() {
                     continue;
                 }
-                byte = byte + 4;
+                byte += 4;
             }
         }
-        //byte = byte + 4;
+        if flag {
+            byte += 4;
+            byte += arg_cnt * 4;
+            info.set_offset((arg_cnt * 4) as i32);
+        }
+        // return val slot???????????????
         if byte % 16 != 0 {
             byte /= 16;
             byte *= 16;
             byte += 16;
         }
-        RISCV.push_str(format!("  addi sp, sp, -{}\n", byte.to_string()).as_str());
-        info.set_stack_length(byte)?;
+        info.set_stack_length(byte as i32)?;
+
+        if byte > 0 {
+            RISCV.push_str(format!("  addi sp, sp, -{}\n", byte.to_string()).as_str());
+        }
+        if flag {
+            RISCV.push_str(format!("  sw ra, {}(sp)\n", (byte - 4).to_string()).as_str());
+        }
+
         for (&bb, node) in self.layout().bbs() {
             RISCV.push_str(format!(".{}:\n", self.dfg().bb(bb).name().as_ref().unwrap()[1..].to_string()).as_str());
             //println!("{}", node.insts().len());
@@ -59,10 +91,20 @@ impl GenerateRISCV for FunctionData {
                 info.add_cur_inst(inst);
                 let val_data = self.dfg().value(inst);
                 val_data.generate(RISCV, info, program);
-                info.remove_cur_inst(inst);
+                info.remove_cur_inst();
                 info.free_register();
             }
         }
+
+        if flag {
+            RISCV.push_str(format!("  lw ra, {}(sp)\n", (byte - 4).to_string()).as_str());
+        }
+        if byte > 0 {
+            RISCV.push_str(format!("  addi sp, sp, {}\n", info.get_stack_length()?.to_string()).as_str());
+        }
+        info.set_stack_length(0);
+        info.set_offset(0);
+        RISCV.push_str("  ret\n\n");
         Ok(())
     }
 }
@@ -92,6 +134,8 @@ impl GenerateRISCV for ValueData {
             ValueKind::Store(store) => store.generate(RISCV, info, program),
             ValueKind::Branch(branch) => branch.generate(RISCV, info, program),
             ValueKind::Jump(jump) => jump.generate(RISCV, info, program),
+            ValueKind::Call(call) => call.generate(RISCV, info, program),
+            //ValueKind::GlobalAlloc(global_alloc) => global_alloc.generate(RISCV, info, program),
             _ => unreachable!(),
         }
     }
@@ -112,20 +156,25 @@ impl GenerateRISCV for Return {
         };
         //println!("!");
         RISCV.push_str(format!("  mv a0, {}\n", info.get_register(self.value().unwrap())?).as_str());*/
-        let dfg = program.func(info.cur_func().unwrap()).dfg();
-        match dfg.value(self.value().unwrap()).kind() {
-            ValueKind::Integer(integer) => {
-                RISCV.push_str(format!("  li a0, {}\n", integer.value().to_string()).as_str());
-            }
-            _ => {
-                let offset = info.get_memory(self.value().unwrap())?;
-                RISCV.push_str(format!("  lw a0, {}(sp)\n", offset.to_string()).as_str());
-            }
+        let val = self.value();
 
+        match val {
+            Some(ret_val) => {
+                let dfg = program.func(info.cur_func().unwrap()).dfg();
+                match dfg.value(self.value().unwrap()).kind() {
+                    ValueKind::Integer(integer) => {
+                        RISCV.push_str(format!("  li a0, {}\n", integer.value().to_string()).as_str());
+                    }
+                    _ => {
+                        let offset = info.get_memory(self.value().unwrap())?;
+                        RISCV.push_str(format!("  lw a0, {}(sp)\n", offset.to_string()).as_str());
+                    }
+        
+                };
+            }
+            None => {}
         };
-        RISCV.push_str(format!("  addi sp, sp, {}\n", info.get_stack_length()?.to_string()).as_str());
-        info.set_stack_length(0);
-        RISCV.push_str("  ret\n");
+        
         Ok(())
     }
 }
@@ -243,8 +292,14 @@ impl GenerateRISCV for Alloc {
 
 impl GenerateRISCV for Load {
     fn generate(&self, RISCV: &mut String, info: &mut Information, program: &Program) -> Result<()> {
-        self.src().generate(RISCV, info, program)?;
-        info.alloc_memory(info.cur_inst().unwrap());   
+        let src = self.src();
+        if src.is_global() {
+            RISCV.push_str(format!("  la t0, {}\n", program.borrow_value(src).name().as_ref().unwrap()[1..].to_string()).as_str());
+            RISCV.push_str("  lw t0, 0(t0)\n");
+        } else {
+            self.src().generate(RISCV, info, program)?;
+        }
+        info.alloc_memory(info.cur_inst().unwrap());
         RISCV.push_str(format!("  sw t0, {}(sp)\n", info.get_memory(info.cur_inst().unwrap())?.to_string()).as_str());
         Ok(())
     }
@@ -252,9 +307,53 @@ impl GenerateRISCV for Load {
 
 impl GenerateRISCV for Store {
     fn generate(&self, RISCV: &mut String, info: &mut Information, program: &Program) -> Result<()> {
-        self.value().generate(RISCV, info, program)?;
-        let offset = info.get_memory(self.dest())?;
-        RISCV.push_str(format!("  sw t0, {}(sp)\n", offset.to_string()).as_str());
+        fn get_param(index: usize, stack_length: usize) -> String {
+            if index < 8 {
+                format!("a{}", index.to_string()).to_string()
+            } else {
+                format!("{}(sp)", (4 * (index - 8) + stack_length).to_string()).to_string()
+            }
+        }
+
+        let func_data = program.func(info.cur_func().unwrap());
+        let src = self.value();
+        let dest = self.dest();
+
+        /*match func_data.dfg().value(src).kind() {
+            ValueKind::Call(call) => {
+                let offset = info.get_memory(self.dest())?;
+                RISCV.push_str(format!("  sw a0, {}(sp)\n", offset.to_string()).as_str());
+                return Ok(());
+            }
+            _ => {}
+        };*/
+
+        let mut flag = false;
+        for (index, value) in func_data.params().iter().enumerate() {
+            if src == *value {
+                flag = true;
+                let stack_length = info.get_stack_length()?;
+                let pos = get_param(index, stack_length as usize);
+                if index < 8 {
+                    RISCV.push_str(format!("  mv t0, {}\n", pos).as_str());
+                } else {
+                    RISCV.push_str(format!("  lw t0, {}\n", pos).as_str());
+                }
+                break;
+            }
+        }
+
+        if !flag {
+            self.value().generate(RISCV, info, program)?;
+        }
+
+        if dest.is_global() {
+            RISCV.push_str(format!("  la t1, {}\n", program.borrow_value(dest).name().as_ref().unwrap()[1..].to_string()).as_str());
+            RISCV.push_str("  sw t0, 0(t1)\n");
+        } else {
+            let offset = info.get_memory(self.dest())?;
+            RISCV.push_str(format!("  sw t0, {}(sp)\n", offset.to_string()).as_str());
+        }
         Ok(())
     }
 }
@@ -277,6 +376,66 @@ impl GenerateRISCV for Jump {
     fn generate(&self, RISCV: &mut String, info: &mut Information, program: &Program) -> Result<()> {
         let dfg = program.func(info.cur_func().unwrap()).dfg();
         RISCV.push_str(format!("  j .{}\n", dfg.bb(self.target()).name().as_ref().unwrap()[1..].to_string()).as_str());
+        Ok(())
+    }
+}
+
+impl GenerateRISCV for Call {
+    fn generate(&self, RISCV: &mut String, info: &mut Information, program: &Program) -> Result<()> {
+        let mut index = 0;
+        let mut dest = String::new();
+        let dfg = program.func(info.cur_func().unwrap()).dfg();
+        for arg in self.args() {
+            if index < 8 {
+                dest = format!("a{}", index).to_string();
+            } else {
+                dest = format!("{}(sp)", 4 * (index - 8)).to_string();
+            }
+            match dfg.value(*arg).kind() {
+                ValueKind::Integer(integer) => {
+                    if index < 8 {
+                        RISCV.push_str(format!("  li {}, {}\n", dest, integer.value().to_string()).as_str());
+                    } else {
+                        RISCV.push_str(format!("  li t0, {}\n", integer.value().to_string()).as_str());
+                        RISCV.push_str(format!("  sw t0, {}\n", dest).as_str());
+                    }
+                }
+                _ => {
+                    let offset = info.get_memory(*arg)?;
+                    if index < 8 {
+                        RISCV.push_str(format!("  lw {}, {}(sp)\n", dest, offset.to_string()).as_str());
+                    } else {
+                        RISCV.push_str(format!("  lw t0, {}\n", offset.to_string()).as_str());
+                        RISCV.push_str(format!("  sw t0, {}\n", dest).as_str());
+                    }
+                }
+    
+            };
+            index += 1;
+        }
+        RISCV.push_str(format!("  call {}\n", program.func(self.callee()).name()[1..].to_string()).as_str());
+        if let TypeKind::Function(_, ret_type) = program.func(self.callee()).ty().kind() {
+            if !ret_type.is_unit() {
+                let offset = info.alloc_memory(info.cur_inst().unwrap())?;
+                RISCV.push_str(format!("  sw a0, {}(sp)\n", offset.to_string()).as_str());
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl GenerateRISCV for GlobalAlloc {
+    fn generate(&self, RISCV: &mut String, info: &mut Information, program: &Program) -> Result<()> {
+        let val_data = program.borrow_value(info.cur_inst().unwrap());
+        RISCV.push_str("  .data\n");
+        RISCV.push_str(format!("  .global {}\n", val_data.name().as_ref().unwrap()[1..].to_string()).as_str());
+        RISCV.push_str(format!("{}:\n", val_data.name().as_ref().unwrap()[1..].to_string()).as_str());
+        match program.borrow_value(self.init()).kind() {
+            ValueKind::ZeroInit(zero_init) => RISCV.push_str("  .zero 4\n"),
+            ValueKind::Integer(integer) => RISCV.push_str(format!("  .word {}\n", integer.value()).as_str()),
+            _ => {}
+        };
         Ok(())
     }
 }

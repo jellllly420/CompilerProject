@@ -10,15 +10,29 @@ match {
     _
 }
 
-pub CompUnit: CompUnit = <func_def: FuncDef> => CompUnit { <> };
+pub CompUnit: CompUnit = <global_items: (GlobalItem)*> => CompUnit { <> };
 
-FuncDef: FuncDef = {
-    <func_type: FuncType> <ident: Ident> "(" ")" <block: Block> => {
-        FuncDef  { <> }
-    }
+GlobalItem: GlobalItem = {
+    <decl: Decl> => GlobalItem::Decl( <> ),
+    <func_def: FuncDef> => GlobalItem::FuncDef( <> ),
 }
 
-FuncType: FuncType = "int" => FuncType::Int;
+FuncDef: FuncDef = {
+    "int" <ident: Ident> "(" ")" <block: Block> => {
+        FuncDef { func_type: FuncType::INT, ident, func_fparams: vec![], block }
+    },
+    "void" <ident: Ident> "(" ")" <block: Block> => {
+        FuncDef { func_type: FuncType::VOID, ident, func_fparams: vec![], block }
+    },
+    "int" <ident: Ident> "(" "int" <func_fparam: Ident> <mut func_fparams: ("," "int" <Ident>)*> ")" <block: Block> => {
+        func_fparams.insert(0, func_fparam);
+        FuncDef { func_type: FuncType::INT, ident, func_fparams, block }
+    },
+    "void" <ident: Ident> "(" "int" <func_fparam: Ident> <mut func_fparams: ("," "int" <Ident>)*> ")" <block: Block> => {
+        func_fparams.insert(0, func_fparam);
+        FuncDef { func_type: FuncType::VOID, ident, func_fparams, block }
+    },
+}
 
 BlockItem: BlockItem = {
     <decl: Decl> => BlockItem::InnerDecl( <> ),
@@ -33,7 +47,8 @@ Stmt: Stmt = {
 }
 
 MatchedStmt: Stmt = {
-    "return" <exp: Exp> ";" => Stmt::ReturnStmt ( <> ),
+    "return" <exp: Exp> ";" => Stmt::ReturnStmt ( ReturnStmt::Int( <> ) ),
+    "return" ";" => Stmt::ReturnStmt ( ReturnStmt::VOID ),
     <lval: Ident> "=" <exp: Exp> ";" => Stmt::AssignStmt ( <> ),
     <exp: (Exp)?> ";" => Stmt::ExpStmt ( <> ),
     <block: Block> => Stmt::Block( <> ),
@@ -64,6 +79,11 @@ Exp: Exp = <lor_exp: LOrExp> => Exp::InnerLOrExp( <> );
 UnaryExp: UnaryExp = {
     <primary_exp: PrimaryExp> => UnaryExp::InnerPrimaryExp(Box::new( <> )),
     <unary_op: UnaryOp> <unary_exp: UnaryExp> => UnaryExp::InnerUnaryExp(unary_op, Box::new(unary_exp)),
+    <ident: Ident> "(" ")" => UnaryExp::InnerCall( ident, vec![] ),
+    <ident: Ident> "(" <func_rparam: Exp> <mut func_rparams: ("," <Exp>)*> ")" => {
+        func_rparams.insert(0, func_rparam);
+        UnaryExp::InnerCall( ident, func_rparams )
+    }
 }
 
 PrimaryExp: PrimaryExp = {

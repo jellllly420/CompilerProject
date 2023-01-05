@@ -138,6 +138,7 @@ impl EvaluateConstant for UnaryExp {
                     _ => None,
                 }
             }
+            _ => None,
         }
     }
 }
@@ -149,13 +150,9 @@ impl EvaluateConstant for PrimaryExp {
             Self::InnerLVal(lval) => {
                 let val = symbol_table.get_const_val(lval);
                 if !val.is_ok() {
-                    return None;
-                }
-                let dfg = program.func(symbol_table.cur_func().unwrap()).dfg();
-                let val_data = dfg.value(val.unwrap());
-                match val_data.kind() {
-                    Integer(integer) => Some(integer.value()),
-                    _ => unreachable!(),
+                    None
+                } else {
+                    Some(val.unwrap())
                 }
             }
             Self::Number(num) => Some(*num),

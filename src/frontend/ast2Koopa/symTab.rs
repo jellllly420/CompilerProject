@@ -5,7 +5,7 @@ use super::{ Error, Result };
 #[derive(Copy, Clone)]
 pub enum CustomValue {
     Value(Value),
-    ConstValue(Value),
+    ConstValue(i32),
 }
 
 pub struct SymbolTable {
@@ -136,6 +136,14 @@ impl SymbolTable {
         }
     }
 
+    pub fn get_func(&self, id: &String) -> Result<Function> {
+        if self.funcs.contains_key(id) {
+            Ok(self.funcs[id])
+        } else {
+            Err(Error::UndefinedFunction)
+        }
+    }
+
     pub fn new_val(&mut self, id: String, val: Value) -> Result<()> {
         let curSymTab = self.vals.last_mut().unwrap();
         curSymTab.insert(id, CustomValue::Value(val));
@@ -143,7 +151,7 @@ impl SymbolTable {
     }
 
 
-    pub fn new_const_val(&mut self, id: String, val: Value) -> Result<()> {
+    pub fn new_const_val(&mut self, id: String, val: i32) -> Result<()> {
         let curSymTab = self.vals.last_mut().unwrap();
         curSymTab.insert(id, CustomValue::ConstValue(val));
         Ok(())
@@ -166,7 +174,7 @@ impl SymbolTable {
         return Err(Error::UndefinedLVal);
     }
 
-    pub fn get_const_val(&self, id: &String) -> Result<Value> {
+    pub fn get_const_val(&self, id: &String) -> Result<i32> {
         /*let curSymTab = self.vals.last().unwrap();
         if curSymTab.contains_key(id) {
             match curSymTab[id] {

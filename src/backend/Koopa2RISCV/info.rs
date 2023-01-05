@@ -50,7 +50,7 @@ impl Information {
         Ok(())
     }
 
-    pub fn remove_cur_inst(&mut self, val: Value) -> Result<()> {
+    pub fn remove_cur_inst(&mut self) -> Result<()> {
         self.cur_inst.pop();
         Ok(())
     }
@@ -120,5 +120,10 @@ impl Information {
 
     pub fn get_stack_length(&self) -> Result<i32> {
         Ok(self.stack_length)
+    }
+
+    pub fn set_offset(&mut self, offset: i32) -> Result<()> {
+        self.offset = offset;
+        Ok(())
     }
 }
