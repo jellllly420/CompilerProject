@@ -91,7 +91,7 @@ impl GenerateRISCV for FunctionData {
         info.set_stack_length(byte as i32)?;
 
         if byte > 0 {
-            if byte > 2047 {
+            if byte > 2048 {
                 RISCV.push_str(format!("  li t0, -{}\n", byte.to_string()).as_str());
                 RISCV.push_str("  add sp, sp, t0\n");
             } else {
@@ -550,7 +550,7 @@ impl GenerateRISCV for Call {
             if index < 8 {
                 dest = format!("a{}", index).to_string();
             } else {
-                dest = format!("{}(sp)", 4 * (index - 8)).to_string();
+                dest = format!("{}", 4 * (index - 8)).to_string();
             }
             match dfg.value(*arg).kind() {
                 ValueKind::Integer(integer) => {
@@ -558,7 +558,13 @@ impl GenerateRISCV for Call {
                         RISCV.push_str(format!("  li {}, {}\n", dest, integer.value().to_string()).as_str());
                     } else {
                         RISCV.push_str(format!("  li t0, {}\n", integer.value().to_string()).as_str());
-                        RISCV.push_str(format!("  sw t0, {}\n", dest).as_str()); // width!!!!!!!!!!!!!!!!!!!
+                        if dest.parse::<i32>().unwrap() > 2047 {
+                            RISCV.push_str(format!("  li t1, {}\n", dest).as_str());
+                            RISCV.push_str("  add t1, sp, t1\n");
+                            RISCV.push_str("  sw t0, 0(t1)\n");
+                        } else {
+                            RISCV.push_str(format!("  sw t0, {}\n", dest).as_str()); 
+                        }
                     }
                 }
                 _ => {
@@ -777,7 +783,14 @@ impl GenerateRISCV for GetPtr {
         RISCV.push_str("  mul t1, t1, t2\n");
         RISCV.push_str("  add t0, t0, t1\n");
         info.alloc_memory(info.cur_inst().unwrap(), 4);
-        RISCV.push_str(format!("  sw t0, {}(sp)\n", info.get_memory(info.cur_inst().unwrap())?.to_string()).as_str());
+        let offset = info.get_memory(info.cur_inst().unwrap())?;
+        if offset > 2047 {
+            RISCV.push_str(format!("  li t1, {}\n", offset.to_string()).as_str());
+            RISCV.push_str("  add t1, sp, t1\n");
+            RISCV.push_str("  sw t0, 0(t1)\n");
+        } else {
+            RISCV.push_str(format!("  sw t0, {}(sp)\n", info.get_memory(info.cur_inst().unwrap())?.to_string()).as_str());
+        }
         
         Ok(())
     }
