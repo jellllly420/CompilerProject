@@ -3,6 +3,7 @@ mod backend;
 
 use lalrpop_util::lalrpop_mod;
 use koopa::back::KoopaGenerator;
+use koopa::ir::types::Type;
 use std::env::args;
 use std::fs::{ read_to_string, write };
 use std::io::Result;
@@ -30,7 +31,7 @@ fn main() -> Result<()> {
 
     let program = frontend::ast2Koopa::ast2Koopa(&ast).unwrap();
 
-    
+    Type::set_ptr_size(4);
 
     match mode.as_str() {
         "-koopa" => {

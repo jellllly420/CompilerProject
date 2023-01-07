@@ -73,10 +73,10 @@ impl Information {
         }
     }
 
-    pub fn alloc_memory(&mut self, val: Value) -> Result<i32> {
+    pub fn alloc_memory(&mut self, val: Value, len: i32) -> Result<i32> {
         self.memory_map.insert(val, self.offset);
-        self.offset += 4;
-        Ok(self.offset - 4)
+        self.offset += len;
+        Ok(self.offset - len)
     }
 
     /*pub fn get_register(&self, val: Value) -> Result<String> {

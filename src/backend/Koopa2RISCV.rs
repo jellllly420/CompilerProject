@@ -11,6 +11,7 @@ pub enum Error {
     RegisterRunOut,
     NoSuchInstruction,
     InstructionGenerated,
+    ZeroInit,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

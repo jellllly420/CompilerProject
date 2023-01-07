@@ -10,10 +10,16 @@ pub enum GlobalItem {
 }
 
 #[derive(Debug)]
+pub enum FuncFParam {
+    ArrayFParam(String, Vec<ConstExp>),
+    IntegerFParam(String),
+}
+
+#[derive(Debug)]
 pub struct FuncDef {
     pub func_type: FuncType,
     pub ident: String,
-    pub func_fparams: Vec<String>,
+    pub func_fparams: Vec<FuncFParam>,
     pub block: Block,
 }
 
@@ -51,13 +57,19 @@ pub enum ReturnStmt {
 #[derive(Debug)]
 pub enum Stmt {
     ReturnStmt(ReturnStmt), 
-    AssignStmt(String, Exp),
+    AssignStmt(LVal, Exp),
     ExpStmt(Option<Exp>),
     Block(Block),
     IfStmt(Box<If>),
     WhileStmt(Box<While>),
     BREAK,
     CONTINUE,
+}
+
+#[derive(Debug)]
+pub struct LVal {
+    pub ident: String,
+    pub dims: Vec<Exp>,
 }
 
 #[derive(Debug)]
@@ -75,7 +87,7 @@ pub enum UnaryExp {
 #[derive(Debug)]
 pub enum PrimaryExp {
     InnerExp(Box<Exp>),
-    InnerLVal(String),
+    InnerLVal(LVal),
     Number(i32),
 }
 
@@ -163,12 +175,14 @@ pub struct ConstDecl {
 #[derive(Debug)]
 pub struct ConstDef {
     pub ident: String,
+    pub dims: Vec<ConstExp>,
     pub const_initval: ConstInitVal,
 }
 
 #[derive(Debug)]
-pub struct ConstInitVal {
-    pub const_exp: ConstExp,
+pub enum ConstInitVal {
+    ConstInteger(ConstExp),
+    ConstArray(Vec<ConstInitVal>)
 }
 
 #[derive(Debug)]
@@ -189,11 +203,12 @@ pub struct VarDecl {
 
 #[derive(Debug)]
 pub enum VarDef {
-    InnerNoInit(String),
-    InnerInit(String, InitVal),
+    InnerNoInit(String, Vec<ConstExp>),
+    InnerInit(String, Vec<ConstExp>, InitVal),
 }
 
 #[derive(Debug)]
-pub struct InitVal {
-    pub exp: Exp,
+pub enum InitVal {
+    Integer(Exp),
+    Array(Vec<InitVal>),
 }

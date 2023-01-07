@@ -24,14 +24,19 @@ FuncDef: FuncDef = {
     "void" <ident: Ident> "(" ")" <block: Block> => {
         FuncDef { func_type: FuncType::VOID, ident, func_fparams: vec![], block }
     },
-    "int" <ident: Ident> "(" "int" <func_fparam: Ident> <mut func_fparams: ("," "int" <Ident>)*> ")" <block: Block> => {
+    "int" <ident: Ident> "(" "int" <func_fparam: FuncFParam> <mut func_fparams: ("," "int" <FuncFParam>)*> ")" <block: Block> => {
         func_fparams.insert(0, func_fparam);
         FuncDef { func_type: FuncType::INT, ident, func_fparams, block }
     },
-    "void" <ident: Ident> "(" "int" <func_fparam: Ident> <mut func_fparams: ("," "int" <Ident>)*> ")" <block: Block> => {
+    "void" <ident: Ident> "(" "int" <func_fparam: FuncFParam> <mut func_fparams: ("," "int" <FuncFParam>)*> ")" <block: Block> => {
         func_fparams.insert(0, func_fparam);
         FuncDef { func_type: FuncType::VOID, ident, func_fparams, block }
     },
+}
+
+FuncFParam: FuncFParam = {
+    <ident: Ident> => FuncFParam::IntegerFParam( <> ),
+    <ident: Ident> "[" "]" <dims: ("[" <ConstExp> "]")*> => FuncFParam::ArrayFParam( <> ),
 }
 
 BlockItem: BlockItem = {
@@ -49,7 +54,7 @@ Stmt: Stmt = {
 MatchedStmt: Stmt = {
     "return" <exp: Exp> ";" => Stmt::ReturnStmt ( ReturnStmt::Int( <> ) ),
     "return" ";" => Stmt::ReturnStmt ( ReturnStmt::VOID ),
-    <lval: Ident> "=" <exp: Exp> ";" => Stmt::AssignStmt ( <> ),
+    <lval: LVal> "=" <exp: Exp> ";" => Stmt::AssignStmt ( <> ),
     <exp: (Exp)?> ";" => Stmt::ExpStmt ( <> ),
     <block: Block> => Stmt::Block( <> ),
     "if" "(" <exp: Exp> ")" <then: MatchedStmt> "else" <else_then: MatchedStmt> => Stmt::IfStmt(Box::new(If{exp, then, else_then: Some(else_then)})),
@@ -62,6 +67,10 @@ OpenStmt: Stmt = {
     "if" "(" <exp: Exp> ")" <then: Stmt> => Stmt::IfStmt(Box::new(If{exp, then, else_then: None})),
     "if" "(" <exp: Exp> ")" <then: MatchedStmt> "else" <else_then: OpenStmt> => Stmt::IfStmt(Box::new(If{exp, then, else_then: Some(else_then)})),
     "while" "(" <exp: Exp> ")" <stmt: OpenStmt> => Stmt::WhileStmt(Box::new(While{ <> })),
+}
+
+LVal: LVal = {
+    <ident: Ident> <dims: ("[" <Exp> "]")*> => LVal { <> }, 
 }
 
 Number: i32 = <num: IntConst> => <>;
@@ -88,7 +97,7 @@ UnaryExp: UnaryExp = {
 
 PrimaryExp: PrimaryExp = {
     "(" <exp: Exp> ")" => PrimaryExp::InnerExp(Box::new( <> )),
-    <lval: Ident> => PrimaryExp::InnerLVal( <> ),
+    <lval: LVal> => PrimaryExp::InnerLVal( <> ),
     <num: Number> => PrimaryExp::Number( <> ),
 }
 
@@ -151,15 +160,31 @@ RelOp: RelOp = {
     ">=" => RelOp::GREATERTHANOREQUAL,
 }
 
-ConstInitVal: ConstInitVal = <const_exp: ConstExp> => ConstInitVal { <> };
+ConstInitVal: ConstInitVal = {
+    <const_exp: ConstExp> => ConstInitVal::ConstInteger( <> ),
+    "{" "}" => ConstInitVal::ConstArray( vec![] ),
+    "{" <dim: ConstInitVal> <mut dims: ("," <ConstInitVal>)*> "}" => {
+        dims.insert(0, dim);
+        ConstInitVal::ConstArray(dims)
+    }
+}
 
-InitVal: InitVal = <exp: Exp> => InitVal { <> };
+InitVal: InitVal = {
+    <exp: Exp> => InitVal::Integer( <> ),
+    "{" "}" => InitVal::Array(vec![]),
+    "{" <dim: InitVal> <mut dims: ("," <InitVal>)*> "}" => {
+        dims.insert(0, dim);
+        InitVal::Array(dims)
+    }
+}
 
-ConstDef: ConstDef = <ident: Ident> "=" <const_initval: ConstInitVal> => ConstDef { <> };
+ConstDef: ConstDef = {
+    <ident: Ident> <dims: ("[" <ConstExp> "]")*> "=" <const_initval: ConstInitVal> => ConstDef { <> },
+}
 
 VarDef: VarDef = {
-    <ident: Ident> "=" <initval: InitVal> => VarDef::InnerInit ( <> ),
-    <ident: Ident> => VarDef::InnerNoInit ( <> ),
+    <ident: Ident> <dims: ("[" <ConstExp> "]")*> "=" <initval: InitVal> => VarDef::InnerInit ( <> ),
+    <ident: Ident> <dims: ("[" <ConstExp> "]")*> => VarDef::InnerNoInit ( <> ),
 }
 
 Decl: Decl = {

@@ -19,6 +19,7 @@ pub enum Error {
     AssignToConst,
     NoLoopWrapped,
     UndefinedFunction,
+    ConstantNotEvaluated,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

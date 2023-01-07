@@ -1,11 +1,19 @@
 use std::collections::HashMap;
-use koopa::ir::{ Function, Value, BasicBlock };
+use koopa::ir::{ Program, Function, Value, BasicBlock, ValueKind };
+use koopa::ir::builder::{ ValueBuilder, LocalInstBuilder };
 use super::{ Error, Result };
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
+pub enum ConstValue {
+    Integer(i32),
+    Array(Value),
+    Init(Vec<ConstValue>),
+}
+
+#[derive(Clone)]
 pub enum CustomValue {
     Value(Value),
-    ConstValue(i32),
+    ConstValue(ConstValue),
 }
 
 pub struct SymbolTable {
@@ -19,6 +27,113 @@ pub struct SymbolTable {
     end: Option<BasicBlock>,
     loop_entry: Vec<BasicBlock>,
     loop_next: Vec<BasicBlock>,
+    fparams: Vec<String>,
+    getting_rparam: bool,
+    getting_rparam_history: Vec<bool>,
+}
+
+impl ConstValue {
+    /// all input correct
+    pub fn reshape(&self, mut pos: usize, program: &Program, symbol_table: &SymbolTable, dims: &[i32], depth: usize) -> Result<Self> {
+        let mut result: Vec<Vec<ConstValue>> = vec![];
+        for i in 0..depth {
+            result.push(vec![]);
+        }
+        match self {
+            Self::Init(init) => {
+                for val in init {
+                    match val {
+                        Self::Integer(integer) => {
+                            pos += 1;
+                            result[0].push(val.clone());
+                            Self::check(&mut result, dims, depth);
+                        }
+                        Self::Array(value) => {
+                            pos += 1;
+                            result[0].push(val.clone());
+                            Self::check(&mut result, dims, depth);
+                        }
+                        Self::Init(init) => {
+                            let mut align = 1;
+                            for index in 0..depth {
+                                align *= dims[index] as usize;
+                                if pos % align == 0 {
+                                    pos += align;
+                                    align = index + 1;
+                                    break;
+                                }
+                            }
+                            let new_val = val.reshape(0, program, symbol_table, dims, align)?;
+                            result[align].push(new_val);
+                            Self::check(&mut result, dims, depth);
+                        }
+                    }
+                }
+            }
+            _ => unreachable!()
+        }
+        while result[depth - 1].len() != dims[depth - 1] as usize {
+            result[0].push(Self::Integer(0));
+            Self::check(&mut result, dims, depth);
+        }
+        Ok(Self::Init(result[depth - 1].clone()))
+
+        
+    }
+    
+    fn check(result: &mut Vec<Vec<Self>>, dims: &[i32], depth: usize) -> Result<()> {
+        for index in 0..(depth - 1) {
+            if result[index].len() == dims[index] as usize {
+                let val = result[index].clone();
+                result[index + 1].push(Self::Init(val));
+                result[index].clear();
+            }
+        }
+        Ok(())
+    }
+
+
+    pub fn global_init(&self, program: &mut Program, symbol_table: &mut SymbolTable) -> Result<Value> {
+        match self {
+            Self::Integer(integer) => {
+                Ok(program.new_value().integer(*integer))
+            }
+            Self::Init(init) => {
+                let mut temp = vec![];
+                for val in init {
+                    temp.push(val.global_init(program, symbol_table)?);
+                }
+                Ok(program.new_value().aggregate(temp))
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn local_init(&self, program: &mut Program, symbol_table: &mut SymbolTable, dest: Value) -> Result<()> {
+        match self {
+            Self::Integer(integer) => {
+                let func_data = program.func_mut(symbol_table.cur_func().unwrap());
+                let val = func_data.dfg_mut().new_value().integer(*integer);
+                let store = func_data.dfg_mut().new_value().store(val, dest);
+                func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([store]);
+            }
+            Self::Array(val) => {
+                let func_data = program.func_mut(symbol_table.cur_func().unwrap());
+                let store = func_data.dfg_mut().new_value().store(*val, dest);
+                func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([store]);
+            }
+            Self::Init(init) => {
+                for (_index, val) in init.iter().enumerate() {
+                    let func_data = program.func_mut(symbol_table.cur_func().unwrap());
+                    let index = func_data.dfg_mut().new_value().integer(_index as i32);
+                    let get_elem_ptr = func_data.dfg_mut().new_value().get_elem_ptr(dest, index);
+                    func_data.layout_mut().bb_mut(symbol_table.cur_bb().unwrap()).insts_mut().extend([get_elem_ptr]);
+                    val.local_init(program, symbol_table, get_elem_ptr)?;
+                }
+            }
+        };
+        Ok(())
+    }
 }
 
 impl SymbolTable {
@@ -34,7 +149,49 @@ impl SymbolTable {
             end: None,
             loop_entry: vec![],
             loop_next: vec![],
+            fparams: vec![],
+            getting_rparam: false,
+            getting_rparam_history: vec![],
         }
+    }
+
+    pub fn is_getting_rparam(&self) -> bool {
+        self.getting_rparam
+    }
+
+    pub fn start_getting_rparam(&mut self) -> Result<()> {
+        self.getting_rparam = true;
+        Ok(())
+    }
+
+    pub fn stop_getting_rparam(&mut self) -> Result<()> {
+        self.getting_rparam = false;
+        Ok(())
+    }
+
+    pub fn store_getting_rparam(&mut self) -> Result<()> {
+        self.getting_rparam_history.push(self.getting_rparam);
+        self.getting_rparam = false;
+        Ok(())
+    }
+
+    pub fn restore_getting_rparam(&mut self) -> Result<()> {
+        self.getting_rparam = self.getting_rparam_history.pop().unwrap();
+        Ok(())
+    }
+
+    pub fn add_fparam(&mut self, ident: String) -> Result<()> {
+        self.fparams.push(ident);
+        Ok(())
+    }
+
+    pub fn clear_fparams(&mut self) -> Result<()> {
+        self.fparams.clear();
+        Ok(())
+    }
+
+    pub fn is_fparam(&self, ident: String) -> bool {
+        self.fparams.contains(&ident)
     }
 
     pub fn push_loop_entry(&mut self, entry: BasicBlock) -> Result<()> {
@@ -151,9 +308,15 @@ impl SymbolTable {
     }
 
 
-    pub fn new_const_val(&mut self, id: String, val: i32) -> Result<()> {
+    pub fn new_const_integer(&mut self, id: String, val: i32) -> Result<()> {
         let curSymTab = self.vals.last_mut().unwrap();
-        curSymTab.insert(id, CustomValue::ConstValue(val));
+        curSymTab.insert(id, CustomValue::ConstValue(ConstValue::Integer(val)));
+        Ok(())
+    }
+
+    pub fn new_const_array(&mut self, id: String, val: Value) -> Result<()> {
+        let curSymTab = self.vals.last_mut().unwrap();
+        curSymTab.insert(id, CustomValue::ConstValue(ConstValue::Array(val)));
         Ok(())
     }
 
@@ -167,14 +330,14 @@ impl SymbolTable {
         for depth in (0..=self.depth).rev() {
             if let Some(symTab) = self.vals.get(depth) {
                 if symTab.contains_key(id) {
-                    return Ok(symTab[id]);
+                    return Ok(symTab[id].clone());
                 }
             }
         }
         return Err(Error::UndefinedLVal);
     }
 
-    pub fn get_const_val(&self, id: &String) -> Result<i32> {
+    pub fn get_const_val(&self, id: &String) -> Result<ConstValue> {
         /*let curSymTab = self.vals.last().unwrap();
         if curSymTab.contains_key(id) {
             match curSymTab[id] {
@@ -187,9 +350,9 @@ impl SymbolTable {
         for depth in (0..=self.depth).rev() {
             if let Some(symTab) = self.vals.get(depth) {
                 if symTab.contains_key(id) {
-                    return match symTab[id] {
+                    return match &symTab[id] {
                         CustomValue::Value(val) => Err(Error::WrongTypeValue),
-                        CustomValue::ConstValue(val) => Ok(val),
+                        CustomValue::ConstValue(val) => Ok(val.clone()),
                     };
                 }
             }

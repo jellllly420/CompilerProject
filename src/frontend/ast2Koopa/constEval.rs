@@ -1,6 +1,6 @@
 use koopa::ir::{ Program, Function, FunctionData, Value, Type };
 use koopa::ir::entities::ValueKind::*;
-use super::symTab::SymbolTable;
+use super::symTab::{ SymbolTable, ConstValue };
 use crate::frontend::ast::*;
 
 pub trait EvaluateConstant {
@@ -148,11 +148,16 @@ impl EvaluateConstant for PrimaryExp {
         match self {
             Self::InnerExp(exp) => exp.evaluate(program, symbol_table),
             Self::InnerLVal(lval) => {
-                let val = symbol_table.get_const_val(lval);
+                let val = symbol_table.get_const_val(&lval.ident);
                 if !val.is_ok() {
                     None
                 } else {
-                    Some(val.unwrap())
+                    match val.unwrap() {
+                        ConstValue::Integer(num) => {
+                            Some(num)
+                        }
+                        _ => None,
+                    }
                 }
             }
             Self::Number(num) => Some(*num),
