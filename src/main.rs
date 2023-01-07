@@ -44,6 +44,10 @@ fn main() -> Result<()> {
             let RISCV = backend::Koopa2RISCV::Koopa2RISCV(&program).unwrap();
             write(output, RISCV);
         }
+        "-perf" => {
+            let RISCV = backend::Koopa2RISCV::Koopa2RISCV(&program).unwrap();
+            write(output, RISCV);
+        }
         _ => unreachable!(),
     }
 
