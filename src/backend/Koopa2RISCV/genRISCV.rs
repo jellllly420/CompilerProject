@@ -563,7 +563,7 @@ impl GenerateRISCV for Call {
                             RISCV.push_str("  add t1, sp, t1\n");
                             RISCV.push_str("  sw t0, 0(t1)\n");
                         } else {
-                            RISCV.push_str(format!("  sw t0, {}\n", dest).as_str()); 
+                            RISCV.push_str(format!("  sw t0, {}(sp)\n", dest).as_str()); 
                         }
                     }
                 }
