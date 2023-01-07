@@ -585,7 +585,7 @@ impl GenerateRISCV for Call {
                         } else {
                             RISCV.push_str(format!("  lw t0, {}(sp)\n", offset.to_string()).as_str());
                         }
-                        RISCV.push_str(format!("  sw t0, {}\n", dest).as_str());
+                        RISCV.push_str(format!("  sw t0, {}(sp)\n", dest).as_str());
                     }
                 }
     
