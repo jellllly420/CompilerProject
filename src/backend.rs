@@ -1,1 +1,1 @@
-pub mod Koopa2RISCV;
+pub mod koopa_to_riscv;

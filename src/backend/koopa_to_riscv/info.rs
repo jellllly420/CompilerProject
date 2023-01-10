@@ -1,4 +1,4 @@
-use koopa::ir::entities::{ Program, Function, FunctionData, Value };
+use koopa::ir::entities::{ Function, Value };
 use super::{ Error, Result };
 use std::collections::HashMap;
 

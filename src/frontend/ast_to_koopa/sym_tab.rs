@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use koopa::ir::{ Program, Function, Value, BasicBlock, ValueKind };
+use koopa::ir::{ Program, Function, Value, BasicBlock };
 use koopa::ir::builder::{ ValueBuilder, LocalInstBuilder };
 use super::{ Error, Result };
 
@@ -36,24 +36,24 @@ impl ConstValue {
     /// all input correct
     pub fn reshape(&self, mut pos: usize, program: &Program, symbol_table: &SymbolTable, dims: &[i32], depth: usize) -> Result<Self> {
         let mut result: Vec<Vec<ConstValue>> = vec![];
-        for i in 0..depth {
+        for _ in 0..depth {
             result.push(vec![]);
         }
         match self {
             Self::Init(init) => {
                 for val in init {
                     match val {
-                        Self::Integer(integer) => {
+                        Self::Integer(_) => {
                             pos += 1;
                             result[0].push(val.clone());
-                            Self::check(&mut result, dims, depth);
+                            Self::check(&mut result, dims, depth)?;
                         }
-                        Self::Array(value) => {
+                        Self::Array(_) => {
                             pos += 1;
                             result[0].push(val.clone());
-                            Self::check(&mut result, dims, depth);
+                            Self::check(&mut result, dims, depth)?;
                         }
-                        Self::Init(init) => {
+                        Self::Init(_) => {
                             let mut align = 1;
                             for index in 0..depth {
                                 align *= dims[index] as usize;
@@ -65,7 +65,7 @@ impl ConstValue {
                             }
                             let new_val = val.reshape(0, program, symbol_table, dims, align)?;
                             result[align].push(new_val);
-                            Self::check(&mut result, dims, depth);
+                            Self::check(&mut result, dims, depth)?;
                         }
                     }
                 }
@@ -74,7 +74,7 @@ impl ConstValue {
         }
         while result[depth - 1].len() != dims[depth - 1] as usize {
             result[0].push(Self::Integer(0));
-            Self::check(&mut result, dims, depth);
+            Self::check(&mut result, dims, depth)?;
         }
         Ok(Self::Init(result[depth - 1].clone()))
 
@@ -302,21 +302,21 @@ impl SymbolTable {
     }
 
     pub fn new_val(&mut self, id: String, val: Value) -> Result<()> {
-        let curSymTab = self.vals.last_mut().unwrap();
-        curSymTab.insert(id, CustomValue::Value(val));
+        let cur_sym_tab = self.vals.last_mut().unwrap();
+        cur_sym_tab.insert(id, CustomValue::Value(val));
         Ok(())
     }
 
 
     pub fn new_const_integer(&mut self, id: String, val: i32) -> Result<()> {
-        let curSymTab = self.vals.last_mut().unwrap();
-        curSymTab.insert(id, CustomValue::ConstValue(ConstValue::Integer(val)));
+        let cur_sym_tab = self.vals.last_mut().unwrap();
+        cur_sym_tab.insert(id, CustomValue::ConstValue(ConstValue::Integer(val)));
         Ok(())
     }
 
     pub fn new_const_array(&mut self, id: String, val: Value) -> Result<()> {
-        let curSymTab = self.vals.last_mut().unwrap();
-        curSymTab.insert(id, CustomValue::ConstValue(ConstValue::Array(val)));
+        let cur_sym_tab = self.vals.last_mut().unwrap();
+        cur_sym_tab.insert(id, CustomValue::ConstValue(ConstValue::Array(val)));
         Ok(())
     }
 
@@ -328,9 +328,9 @@ impl SymbolTable {
             Err(Error::UndefinedLVal)
         }*/
         for depth in (0..=self.depth).rev() {
-            if let Some(symTab) = self.vals.get(depth) {
-                if symTab.contains_key(id) {
-                    return Ok(symTab[id].clone());
+            if let Some(sym_tab) = self.vals.get(depth) {
+                if sym_tab.contains_key(id) {
+                    return Ok(sym_tab[id].clone());
                 }
             }
         }
@@ -348,10 +348,10 @@ impl SymbolTable {
             Err(Error::UndefinedLVal)
         }*/
         for depth in (0..=self.depth).rev() {
-            if let Some(symTab) = self.vals.get(depth) {
-                if symTab.contains_key(id) {
-                    return match &symTab[id] {
-                        CustomValue::Value(val) => Err(Error::WrongTypeValue),
+            if let Some(sym_tab) = self.vals.get(depth) {
+                if sym_tab.contains_key(id) {
+                    return match &sym_tab[id] {
+                        CustomValue::Value(_) => Err(Error::WrongTypeValue),
                         CustomValue::ConstValue(val) => Ok(val.clone()),
                     };
                 }

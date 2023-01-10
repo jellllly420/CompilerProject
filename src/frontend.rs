@@ -1,2 +1,2 @@
 pub mod ast;
-pub mod ast2Koopa;
+pub mod ast_to_koopa;

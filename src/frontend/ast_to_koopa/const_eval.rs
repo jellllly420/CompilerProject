@@ -1,6 +1,5 @@
-use koopa::ir::{ Program, Function, FunctionData, Value, Type };
-use koopa::ir::entities::ValueKind::*;
-use super::symTab::{ SymbolTable, ConstValue };
+use koopa::ir::Program;
+use super::sym_tab::{ SymbolTable, ConstValue };
 use crate::frontend::ast::*;
 
 pub trait EvaluateConstant {
@@ -127,8 +126,8 @@ impl EvaluateConstant for UnaryExp {
         match self {
             Self::InnerPrimaryExp(primary_exp) => primary_exp.evaluate(program, symbol_table),
             Self::InnerUnaryExp(unary_op, unary_exp) => {
-                match (unary_exp.evaluate(program, symbol_table)) {
-                    (Some(rhs)) => {
+                match unary_exp.evaluate(program, symbol_table) {
+                    Some(rhs) => {
                         match unary_op {
                             UnaryOp::POSITIVE => Some(0 + rhs),
                             UnaryOp::NEGATIVE => Some(0 - rhs),

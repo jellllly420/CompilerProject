@@ -29,7 +29,7 @@ fn main() -> Result<()> {
     let ast = sysy::CompUnitParser::new().parse(&input).unwrap();
 
 
-    let program = frontend::ast2Koopa::ast2Koopa(&ast).unwrap();
+    let program = frontend::ast_to_koopa::ast_to_koopa(&ast).unwrap();
 
     Type::set_ptr_size(4);
 
@@ -38,15 +38,15 @@ fn main() -> Result<()> {
             let mut generator = KoopaGenerator::new(Vec::new());
             generator.generate_on(&program).unwrap();
             let text_form_ir = from_utf8(&generator.writer()).unwrap().to_string();
-            write(output, text_form_ir);
+            write(output, text_form_ir)?;
         }
         "-riscv" => {
-            let RISCV = backend::Koopa2RISCV::Koopa2RISCV(&program).unwrap();
-            write(output, RISCV);
+            let riscv = backend::koopa_to_riscv::koopa_to_riscv(&program).unwrap();
+            write(output, riscv)?;
         }
         "-perf" => {
-            let RISCV = backend::Koopa2RISCV::Koopa2RISCV(&program).unwrap();
-            write(output, RISCV);
+            let riscv = backend::koopa_to_riscv::koopa_to_riscv(&program).unwrap();
+            write(output, riscv)?;
         }
         _ => unreachable!(),
     }
